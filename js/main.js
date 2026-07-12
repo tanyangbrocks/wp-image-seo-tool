@@ -1,7 +1,8 @@
-import { LANGUAGES } from './languages.js';
+import { LANGUAGES, PADDLE_SCRIPTS, PADDLE_DEFAULT_SCRIPT } from './languages.js';
 import { extractTextColor } from './color.js';
 import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
+import { recognizeWithPaddleOCR } from './ocr-paddle.js';
 import { buildFinalHtml } from './html-builder.js';
 import { renderPreview } from './preview.js';
 
@@ -16,10 +17,14 @@ const outputWrap = document.getElementById('outputWrap');
 const htmlOutput = document.getElementById('htmlOutput');
 const copyBtn = document.getElementById('copyBtn');
 const copiedMsg = document.getElementById('copiedMsg');
-const useCloudOcr = document.getElementById('useCloudOcr');
 const apiKeyInput = document.getElementById('apiKeyInput');
 const rememberKey = document.getElementById('rememberKey');
 const languageList = document.getElementById('languageList');
+const languageListPanel = document.getElementById('languageListPanel');
+const visionKeyPanel = document.getElementById('visionKeyPanel');
+const paddleScriptPanel = document.getElementById('paddleScriptPanel');
+const paddleScriptSelect = document.getElementById('paddleScriptSelect');
+const engineRadios = document.getElementsByName('engineChoice');
 const wpPreviewWrap = document.getElementById('wpPreviewWrap');
 const wpPreviewFrame = document.getElementById('wpPreviewFrame');
 
@@ -31,9 +36,31 @@ for (const lang of LANGUAGES) {
   languageList.appendChild(row);
 }
 
+for (const script of PADDLE_SCRIPTS) {
+  const opt = document.createElement('option');
+  opt.value = script.key;
+  opt.textContent = script.label;
+  paddleScriptSelect.appendChild(opt);
+}
+paddleScriptSelect.value = PADDLE_DEFAULT_SCRIPT;
+
 function getSelectedLanguages() {
   return LANGUAGES.filter((lang) => document.getElementById('lang_' + lang.tesseract).checked);
 }
+
+function getSelectedEngine() {
+  for (const radio of engineRadios) if (radio.checked) return radio.value;
+  return 'paddle';
+}
+
+function updateEnginePanels() {
+  const engine = getSelectedEngine();
+  paddleScriptPanel.style.display = engine === 'paddle' ? 'block' : 'none';
+  languageListPanel.style.display = engine === 'paddle' ? 'none' : 'block';
+  visionKeyPanel.style.display = engine === 'vision' ? 'block' : 'none';
+}
+for (const radio of engineRadios) radio.addEventListener('change', updateEnginePanels);
+updateEnginePanels();
 
 // Restore a remembered key (only ever written to *this browser's* local
 // storage by the checkbox below - never embedded in the shared HTML file
@@ -42,7 +69,8 @@ const savedKey = localStorage.getItem('wpOverlayGen_visionApiKey');
 if (savedKey) {
   apiKeyInput.value = savedKey;
   rememberKey.checked = true;
-  useCloudOcr.checked = true;
+  document.getElementById('engine_vision').checked = true;
+  updateEnginePanels();
 }
 rememberKey.addEventListener('change', () => {
   if (rememberKey.checked && apiKeyInput.value.trim()) {
@@ -86,11 +114,22 @@ imageInput.addEventListener('change', async () => {
   const file = imageInput.files[0];
   if (!file) return;
 
+  const engine = getSelectedEngine();
   const selectedLanguages = getSelectedLanguages();
-  if (!selectedLanguages.length) {
+  // Only Tesseract/Google Vision need a language pick - PaddleOCR's default
+  // model already covers CJK+Latin with no selection required (see
+  // js/languages.js PADDLE_SCRIPTS comment).
+  if (engine !== 'paddle' && !selectedLanguages.length) {
     ocrStatus.className = 'error';
     ocrStatus.style.display = 'block';
     ocrStatus.textContent = '請至少勾選一種語言再上傳圖片';
+    imageInput.value = '';
+    return;
+  }
+  if (engine === 'vision' && !apiKeyInput.value.trim()) {
+    ocrStatus.className = 'error';
+    ocrStatus.style.display = 'block';
+    ocrStatus.textContent = '請先填 Google Cloud Vision API 金鑰再上傳圖片（或改選其他引擎）';
     imageInput.value = '';
     return;
   }
@@ -128,31 +167,31 @@ imageInput.addEventListener('change', async () => {
       ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
       try {
         let rawLines = null;
-        const wantsCloud = useCloudOcr.checked && apiKeyInput.value.trim();
 
         const tesseractLangString = selectedLanguages.map((l) => l.tesseract).join('+');
         const visionLangHints = selectedLanguages.map((l) => l.vision);
+        const paddleScriptKey = paddleScriptSelect.value;
 
-        if (wantsCloud) {
+        if (engine === 'vision') {
           try {
             ocrStatus.textContent = '正在用 Google Cloud Vision 辨識圖片中的文字與位置…';
             rawLines = await recognizeWithGoogleVision(imageDataUrl, apiKeyInput.value.trim(), visionLangHints);
           } catch (cloudErr) {
-            // Fall back to the offline engine rather than dead-ending the
-            // whole flow on a bad/expired key or network hiccup.
-            ocrStatus.textContent = `Google Cloud Vision 辨識失敗（${cloudErr.message}），改用離線辨識…`;
-            rawLines = null;
+            // Fall back to PaddleOCR (the default engine) rather than
+            // dead-ending the whole flow on a bad/expired key or network hiccup.
+            ocrStatus.textContent = `Google Cloud Vision 辨識失敗（${cloudErr.message}），改用 PaddleOCR…`;
+            rawLines = await recognizeWithPaddleOCR(imageDataUrl, PADDLE_DEFAULT_SCRIPT);
           }
-        }
-
-        if (!rawLines) {
-          if (!wantsCloud) ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
+        } else if (engine === 'tesseract') {
           // Only load/use the languages the user actually checked - fewer
           // languages means a smaller model download and less ambiguity
           // between similarly-shaped characters across scripts.
           rawLines = await recognizeWithTesseract(imageDataUrl, tesseractLangString, (progress) => {
             ocrStatus.textContent = `正在辨識圖片中的文字與位置…${Math.round(progress * 100)}%`;
           });
+        } else {
+          ocrStatus.textContent = '正在用 PaddleOCR 辨識圖片中的文字與位置（第一次使用需要下載模型，可能需要幾秒到十幾秒）…';
+          rawLines = await recognizeWithPaddleOCR(imageDataUrl, paddleScriptKey);
         }
 
         detectedLines = rawLines.filter((l) => l.text.trim()).map((l) => {

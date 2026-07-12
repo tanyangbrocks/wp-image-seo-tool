@@ -16,30 +16,44 @@
 </p>
 
 <details class="advanced" open>
-  <summary>語言設定：勾選圖片裡包含的語言（影響辨識依據，勾越少通常辨識越快越準）</summary>
+  <summary>辨識引擎與語言設定</summary>
   <div class="body">
-    <div id="languageList"></div>
-  </div>
-</details>
+    <div class="checkboxRow">
+      <input type="radio" name="engineChoice" id="engine_paddle" value="paddle" checked />
+      <label for="engine_paddle" style="margin:0;">PaddleOCR（預設，免費離線；實測對照片背景/紋理誤判成文字的抵抗力比 Tesseract 好很多，詳見 <code>docs/plan-paddleocr-evaluation.md</code>）</label>
+    </div>
+    <div class="checkboxRow">
+      <input type="radio" name="engineChoice" id="engine_tesseract" value="tesseract" />
+      <label for="engine_tesseract" style="margin:0;">Tesseract（免費離線，原本的引擎，留著當退路）</label>
+    </div>
+    <div class="checkboxRow">
+      <input type="radio" name="engineChoice" id="engine_vision" value="vision" />
+      <label for="engine_vision" style="margin:0;">Google Cloud Vision（需要自己的 API 金鑰，準確度最高，尤其對花俏字體）</label>
+    </div>
 
-<details class="advanced">
-  <summary>進階設定：使用自己的 API 金鑰提升辨識準確度（選填）</summary>
-  <div class="body">
-    <div class="checkboxRow">
-      <input type="checkbox" id="useCloudOcr" />
-      <label for="useCloudOcr" style="margin:0;">改用 Google Cloud Vision API 辨識（比預設的離線辨識準確很多，尤其對花俏字體）</label>
+    <div id="paddleScriptPanel">
+      <label for="paddleScriptSelect">書寫系統（大部分情況不用改，PaddleOCR 預設模型已經涵蓋中日英文+拉丁語系）</label>
+      <select id="paddleScriptSelect"></select>
     </div>
-    <label for="apiKeyInput">你自己的 Google Cloud Vision API 金鑰</label>
-    <input type="password" id="apiKeyInput" placeholder="貼上你自己的金鑰（不會分享給任何人，只存在你自己的瀏覽器）" />
-    <div class="checkboxRow">
-      <input type="checkbox" id="rememberKey" />
-      <label for="rememberKey" style="margin:0;">記住這把金鑰（存在這台電腦的瀏覽器本機，下次不用重貼）</label>
+
+    <div id="languageListPanel" style="display:none;">
+      <label>語言（影響辨識依據，勾越少通常辨識越快越準）</label>
+      <div id="languageList"></div>
     </div>
-    <p class="smallNote">
-      金鑰只會從你的瀏覽器直接打到 Google 的伺服器，不會經過任何第三方、也不會存進產生的 HTML 裡。
-      每個人要用這個功能都要貼自己的金鑰，不要把你的金鑰分享給別人。
-      沒有金鑰或沒勾選的話，會照常使用免費的離線辨識，不影響原本的功能。
-    </p>
+
+    <div id="visionKeyPanel" style="display:none;">
+      <label for="apiKeyInput">你自己的 Google Cloud Vision API 金鑰</label>
+      <input type="password" id="apiKeyInput" placeholder="貼上你自己的金鑰（不會分享給任何人，只存在你自己的瀏覽器）" />
+      <div class="checkboxRow">
+        <input type="checkbox" id="rememberKey" />
+        <label for="rememberKey" style="margin:0;">記住這把金鑰（存在這台電腦的瀏覽器本機，下次不用重貼）</label>
+      </div>
+      <p class="smallNote">
+        金鑰只會從你的瀏覽器直接打到 Google 的伺服器，不會經過任何第三方、也不會存進產生的 HTML 裡。
+        每個人要用這個功能都要貼自己的金鑰，不要把你的金鑰分享給別人。
+        辨識失敗時（金鑰錯誤/網路問題）會自動改用 PaddleOCR。
+      </p>
+    </div>
   </div>
 </details>
 

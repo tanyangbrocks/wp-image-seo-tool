@@ -17,7 +17,7 @@ p.hint { color: #666; font-size: 14px; line-height: 1.6; }
   margin-bottom: 20px;
 }
 label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
-input[type="file"], input[type="password"], textarea {
+input[type="file"], input[type="password"], select, textarea {
   width: 100%;
   padding: 10px;
   border: 1px solid #ccc;
