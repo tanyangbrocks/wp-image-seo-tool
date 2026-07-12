@@ -1,0 +1,13 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+
+# Vercel
+.vercel
+
+# in case tooling gets added later (bundler, linter, etc.)
+node_modules/
+dist/
+.env
+.env.local
