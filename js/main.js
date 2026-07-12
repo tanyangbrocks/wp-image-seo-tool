@@ -125,6 +125,11 @@ let imageDataUrl = null;
 let naturalWidth = 0;
 let naturalHeight = 0;
 let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSizeCqw, color, shadow, opacity }
+// Bumped once per upload; a slow upload's async chain (image decode -> OCR,
+// which can take several seconds) checks this before writing back any
+// results, so a second upload started before the first finishes can't have
+// its state clobbered by the first one's now-stale results landing late.
+let uploadToken = 0;
 
 function generateAndPreview() {
   const alt = altInput.value.trim();
@@ -205,8 +210,11 @@ imageInput.addEventListener('change', async () => {
     return;
   }
 
+  const thisUploadToken = ++uploadToken;
+
   const reader = new FileReader();
   reader.onload = async (e) => {
+    if (thisUploadToken !== uploadToken) return; // superseded by a newer upload before the file even finished reading
     imageDataUrl = e.target.result;
     detectedLines = [];
     altInput.value = '';
@@ -219,7 +227,13 @@ imageInput.addEventListener('change', async () => {
     ocrStatus.textContent = '載入圖片中…';
 
     const img = new Image();
+    img.onerror = () => {
+      if (thisUploadToken !== uploadToken) return;
+      ocrStatus.className = 'error';
+      ocrStatus.textContent = '圖片載入失敗（檔案可能已損壞，或不是有效的圖片格式），請重新選擇圖片';
+    };
     img.onload = async () => {
+      if (thisUploadToken !== uploadToken) return; // a newer upload started while this image was decoding
       naturalWidth = img.naturalWidth;
       naturalHeight = img.naturalHeight;
 
@@ -267,6 +281,8 @@ imageInput.addEventListener('change', async () => {
           rawLines = await recognizeWithPaddleOCR(imageDataUrl, paddleScriptKey);
         }
 
+        if (thisUploadToken !== uploadToken) return; // superseded while OCR was running - discard these stale results silently
+
         detectedLines = rawLines.filter((l) => l.text.trim()).map((l) => {
           const { x0, y0, x1, y1 } = l;
           const { color, shadow } = extractTextColor(ctx, x0, y0, x1, y1);
@@ -300,10 +316,12 @@ imageInput.addEventListener('change', async () => {
           ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來；右邊仍可以手動新增文字方塊）';
         }
       } catch (err) {
+        if (thisUploadToken !== uploadToken) return;
         ocrStatus.className = 'error';
         ocrStatus.textContent = '辨識失敗（可能是網路問題，模型下載不了）：' + err.message;
       }
 
+      if (thisUploadToken !== uploadToken) return;
       generateBtn.disabled = !altInput.value.trim() || !imageDataUrl;
     };
     img.src = imageDataUrl;
@@ -313,7 +331,19 @@ imageInput.addEventListener('change', async () => {
 
 copyBtn.addEventListener('click', async () => {
   htmlOutput.select();
-  await navigator.clipboard.writeText(htmlOutput.value);
-  copiedMsg.style.display = 'inline';
-  setTimeout(() => { copiedMsg.style.display = 'none'; }, 2000);
+  // navigator.clipboard.writeText() can legitimately reject (permission
+  // denied, insecure/non-HTTPS context, page not focused) - previously
+  // unhandled, so a failure here silently did nothing with no feedback.
+  try {
+    await navigator.clipboard.writeText(htmlOutput.value);
+    copiedMsg.textContent = '已複製 ✓';
+    copiedMsg.classList.remove('error');
+    copiedMsg.style.display = 'inline';
+    setTimeout(() => { copiedMsg.style.display = 'none'; }, 2000);
+  } catch (err) {
+    copiedMsg.textContent = '複製失敗，請手動選取文字後用 Ctrl+C（Mac 為 Cmd+C）複製';
+    copiedMsg.classList.add('error');
+    copiedMsg.style.display = 'inline';
+    setTimeout(() => { copiedMsg.style.display = 'none'; }, 4000);
+  }
 });

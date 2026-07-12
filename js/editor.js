@@ -52,13 +52,15 @@ function renderCanvas() {
     const moveHandle = document.createElement('button');
     moveHandle.type = 'button';
     moveHandle.className = 'ovMoveHandle';
-    moveHandle.title = '拖曳移動位置';
+    moveHandle.title = '拖曳移動位置（取得焦點後也可以用方向鍵微調，Shift+方向鍵幅度較大）';
+    moveHandle.setAttribute('aria-label', '拖曳移動位置');
     moveHandle.textContent = '✛';
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'ovDeleteBtn';
     delBtn.title = '刪除這個文字方塊';
+    delBtn.setAttribute('aria-label', '刪除這個文字方塊');
     delBtn.textContent = '×';
 
     box.appendChild(textEl);
@@ -104,6 +106,28 @@ function deleteLine(index) {
     selectedIndex -= 1;
   }
   renderCanvas();
+  // Whatever had focus (the delete badge itself, or the panel's delete
+  // button just before hidePanel() hid its container) was just removed from
+  // the DOM - browsers drop focus to <body> in that case with no visual
+  // indication of where it went. editorCanvasWrap is always present and has
+  // tabindex="-1" (index.html) specifically so it's a valid, stable landing
+  // spot for keyboard users instead of losing focus entirely.
+  editorCanvasWrap.focus();
+}
+
+const MIN_BOX_PCT = 2;
+
+// Keeps a box's rectangle fully inside the 0-100% canvas bounds. Resize
+// already clamped width/height at their lower end but nothing clamped
+// leftPct/topPct, so a move (or a resize whose anchor corner drags past an
+// edge) could push a box out from under #editorCanvasWrap's overflow:hidden
+// with no way to get it back - there's no numeric position field, only the
+// handles, and a box you can't see has no handles to grab.
+function clampLine(line) {
+  line.widthPct = Math.min(Math.max(MIN_BOX_PCT, line.widthPct), 100);
+  line.heightPct = Math.min(Math.max(MIN_BOX_PCT, line.heightPct), 100);
+  line.leftPct = Math.min(Math.max(0, line.leftPct), 100 - line.widthPct);
+  line.topPct = Math.min(Math.max(0, line.topPct), 100 - line.heightPct);
 }
 
 function updateBoxGeometry(index) {
@@ -145,7 +169,21 @@ editorCanvasWrap.addEventListener('pointerdown', (e) => {
   const rect = editorCanvasWrap.getBoundingClientRect();
   const line = detectedLines[index];
   const handle = moveHandle || resizeHandle;
-  handle.setPointerCapture(e.pointerId);
+  // setPointerCapture keeps this handle receiving pointermove/up even if the
+  // cursor moves outside it mid-drag - a nice-to-have, not a requirement,
+  // since pointermove is also handled via delegation on editorCanvasWrap.
+  // It can throw InvalidPointerId if the browser doesn't consider this
+  // pointerId "active" (observed with synthetic PointerEvents in testing;
+  // exotic real input could plausibly hit the same path) - letting that
+  // exception escape would abort this handler *before* dragState gets set,
+  // silently turning every subsequent pointermove into a no-op for the rest
+  // of the drag. Capture is strictly an enhancement, so a failure here must
+  // not block dragState from being set up.
+  try {
+    handle.setPointerCapture(e.pointerId);
+  } catch (err) {
+    /* not fatal - see comment above */
+  }
 
   dragState = {
     type: moveHandle ? 'move' : 'resize',
@@ -162,8 +200,6 @@ editorCanvasWrap.addEventListener('pointerdown', (e) => {
     canvasHeight: rect.height
   };
 });
-
-const MIN_BOX_PCT = 2;
 
 editorCanvasWrap.addEventListener('pointermove', (e) => {
   if (!dragState || e.pointerId !== dragState.pointerId) return;
@@ -203,6 +239,7 @@ editorCanvasWrap.addEventListener('pointermove', (e) => {
       line.heightPct = newH;
     }
   }
+  clampLine(line);
   updateBoxGeometry(dragState.index);
 });
 
@@ -212,6 +249,30 @@ function endDrag(e) {
 }
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
+
+// Keyboard-only equivalent for moving a box: the move handle is a real
+// <button>, reachable by Tab, but arrow keys previously did nothing once it
+// had focus - pointer drag was the only way to reposition anything.
+// (Resize doesn't get a keyboard path here - four directions to disambiguate
+// makes the interaction meaningfully more complex, and move already covers
+// the core "get it un-stuck" need.)
+const ARROW_DELTAS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+editorCanvasWrap.addEventListener('keydown', (e) => {
+  const moveHandle = e.target.closest && e.target.closest('.ovMoveHandle');
+  if (!moveHandle) return;
+  const delta = ARROW_DELTAS[e.key];
+  if (!delta) return;
+  e.preventDefault();
+
+  const box = moveHandle.closest('.ovBox');
+  const index = Number(box.dataset.index);
+  const line = detectedLines[index];
+  const step = e.shiftKey ? 2 : 0.5;
+  line.leftPct += delta[0] * step;
+  line.topPct += delta[1] * step;
+  clampLine(line);
+  updateBoxGeometry(index);
+});
 
 editorCanvasWrap.addEventListener('click', (e) => {
   const delBtn = e.target.closest('.ovDeleteBtn');
