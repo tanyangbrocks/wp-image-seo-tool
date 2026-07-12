@@ -8,7 +8,22 @@ export function escapeHtml(str) {
   return div.innerHTML.replace(/"/g, '&quot;');
 }
 
-export function buildFinalHtml(imageDataUrl, altText, detectedLines) {
+// Builds a JSON-LD <script> block safely: JSON.stringify handles JSON
+// escaping, but a literal "</script" inside the alt text would still break
+// out of the tag early, so "<" is additionally neutralized to "<"
+// (the standard technique for embedding JSON inside HTML).
+function buildImageObjectJsonLd(imageDataUrl, altText) {
+  const json = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'ImageObject',
+    contentUrl: imageDataUrl,
+    caption: altText,
+    description: altText
+  });
+  return json.replace(/</g, '\\u003c');
+}
+
+export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight) {
   const escapedAlt = escapeHtml(altText);
   const lineDivs = detectedLines.map((line) => {
     // opacity: per-block, live-editable in the manual overlay editor
@@ -20,8 +35,33 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines) {
     return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: nowrap; overflow: hidden; display: flex; align-items: center; font-weight: 700; line-height: 1.05; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; color: ${line.color}; text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
   }).join('\n');
 
-  return `<div style="position: relative; width: 100%; container-type: inline-size; border-radius: 10px; overflow: hidden;">
-  <img src="${imageDataUrl}" alt="${escapedAlt}" style="display: block; width: 100%; height: auto;" />
+  // width/height attributes (the image's real intrinsic pixel size, distinct
+  // from the CSS width:100%/height:auto that controls display size) let the
+  // browser reserve the correct aspect ratio before the image loads - this
+  // is what avoids Cumulative Layout Shift, a real Core Web Vitals/SEO
+  // signal. loading="lazy"/decoding="async" are the standard defaults for
+  // an image embedded mid-content (skip/remove "lazy" if this ends up being
+  // the page's hero/above-the-fold image).
+  const sizeAttrs = naturalWidth && naturalHeight ? ` width="${naturalWidth}" height="${naturalHeight}"` : '';
+
+  // <figure>/<figcaption> (rather than a bare <div>) plus a JSON-LD
+  // ImageObject block are the standard structured-HTML techniques for
+  // "image SEO" - they give Google Images and AI answer engines an explicit
+  // caption/description for the image on top of the alt text, instead of
+  // relying on an unstructured wrapper. The figcaption repeats the alt text
+  // visibly (captions are a stronger ranking signal for image search than
+  // alt text alone) rather than only living in a non-visible attribute.
+  return `<!--
+  SEO 提醒：<img> 的 src 目前是 base64 內嵌圖片（data:image/...），
+  Google 圖片搜尋等引擎無法索引 base64 圖片，也無法被加進圖片 sitemap。
+  貼上 WordPress 後，建議額外把這張圖上傳到媒體庫，再把下面 <img> 的
+  src 換成媒體庫給的真實網址（例如 https://你的網域/wp-content/uploads/...），
+  下面的 JSON-LD contentUrl 也一併換成同一個網址，才能真正被圖片搜尋索引。
+-->
+<figure style="position: relative; width: 100%; container-type: inline-size; border-radius: 10px; overflow: hidden; margin: 0;">
+  <img src="${imageDataUrl}" alt="${escapedAlt}"${sizeAttrs} loading="lazy" decoding="async" style="display: block; width: 100%; height: auto;" />
 ${lineDivs}
-</div>`;
+  <figcaption style="margin-top: 8px; font-size: 13px; color: #666; text-align: center;">${escapedAlt}</figcaption>
+</figure>
+<script type="application/ld+json">${buildImageObjectJsonLd(imageDataUrl, altText)}</script>`;
 }

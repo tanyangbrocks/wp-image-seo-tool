@@ -130,7 +130,7 @@ function generateAndPreview() {
   const alt = altInput.value.trim();
   if (!alt || !imageDataUrl) return;
 
-  const html = buildFinalHtml(imageDataUrl, alt, detectedLines);
+  const html = buildFinalHtml(imageDataUrl, alt, detectedLines, naturalWidth, naturalHeight);
   htmlOutput.value = html;
   outputWrap.hidden = false;
 
