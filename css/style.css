@@ -1,33 +1,66 @@
+/* Palette matched to C:\Portfolio's light mode (see its src/app/globals.css
+   :root block): warm cream background/card, olive-gold highlight as the one
+   "eye-catching" accent, near-black primary/foreground for everything else. */
+:root {
+  --background: #fbf3dc;
+  --card: #efe5c8;
+  --border: #e3d7b5;
+  --foreground: #1a1a1a;
+  --primary: #262626;
+  --highlight: #7e6725;
+  --highlight-foreground: #ffffff;
+}
+
 * { box-sizing: border-box; }
+
+/* Bounce/dynamic feel matched to C:\Portfolio's global button interaction:
+   press shrinks quickly on a snappy ease, release/hover springs back with an
+   overshoot curve (cubic-bezier peak >1 = the "bounce"). */
+button:not(:disabled) {
+  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+}
+button:not(:disabled):hover { transform: translateY(-2px); }
+button:not(:disabled):active {
+  transform: scale(0.92);
+  transition-duration: 100ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 body {
-  font-family: -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif;
+  font-family: "Microsoft JhengHei", "PingFang TC", -apple-system, sans-serif;
   max-width: 1100px;
   margin: 40px auto;
   padding: 0 20px;
-  color: #222;
-  background: #f6f6f6;
+  color: var(--foreground);
+  background: var(--background);
 }
-.headerRow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-h1 { font-size: 22px; margin: 0; }
-.credit { font-size: 13px; color: #888; }
-p.hint { color: #666; font-size: 14px; line-height: 1.6; }
+.headerRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+h1 { font-size: 24px; margin: 0; color: var(--highlight); }
+.subtitle { margin: 4px 0 0; font-size: 14px; color: var(--foreground); opacity: 0.7; }
+.credit { font-size: 13px; color: var(--foreground); opacity: 0.55; }
 
 .panel {
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 20px;
   margin-bottom: 20px;
 }
-label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; color: var(--foreground); }
+/* Only actual section headers get the highlight color - form captions
+   (radio/checkbox descriptions, field labels like "字級"/"顏色") stay
+   regular text so the accent still reads as "important", not just decorative. */
+.sectionTitle { color: var(--highlight); }
 input[type="file"], input[type="password"], select, textarea {
   width: 100%;
   padding: 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 14px;
   margin-bottom: 16px;
   font-family: inherit;
+  background: #fff;
+  color: var(--foreground);
 }
 textarea { resize: vertical; min-height: 44px; }
 .checkboxRow { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; }
@@ -37,33 +70,42 @@ textarea { resize: vertical; min-height: 44px; }
 #languageList .checkboxRow { margin-bottom: 8px; width: 130px; }
 
 .genBtn {
-  background: #5542fa; color: #fff; border: none; padding: 12px 24px;
-  border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer;
+  background: #fff; color: var(--highlight); border: 1.5px solid var(--highlight); padding: 12px 24px;
+  border-radius: 6px; font-size: 15px; font-weight: 700; cursor: pointer;
 }
-.genBtn:hover { background: #4433e0; }
-.genBtn:disabled { background: #aaa; cursor: not-allowed; }
+.genBtn:hover:not(:disabled) { background: var(--highlight); color: var(--highlight-foreground); }
+.genBtn:disabled { background: #eee; color: #999; border-color: #ccc; cursor: not-allowed; }
 
 /* Collapsible settings menu: closed by default, opens as a floating panel
    overlaid on top of the page instead of pushing the rest of the layout
    down (unlike the old <details> element it replaced). */
 .settingsBar { position: relative; margin-bottom: 20px; }
 #settingsToggleBtn {
-  padding: 10px 16px; border-radius: 8px; border: 1px solid #ddd;
-  background: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+  padding: 10px 16px; border-radius: 8px; border: 1.5px solid var(--highlight);
+  background: #fff; color: var(--highlight); font-size: 14px; font-weight: 700; cursor: pointer;
 }
-#settingsToggleBtn:hover { background: #f0f0f0; }
+#settingsToggleBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
 .popoverPanel {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
   width: min(560px, 90vw);
-  background: #fff; border: 1px solid #ddd; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 16px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
 }
 .popoverPanel[hidden] { display: none; }
+/* A little bounce on open, matching the button press/release feel below -
+   only an entrance animation since [hidden] snaps display:none on close. */
+.popoverPanel:not([hidden]) {
+  animation: fadeSlideDown 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes fadeSlideDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 .mainGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 @media (max-width: 720px) { .mainGrid { grid-template-columns: 1fr; } }
 
-#ocrStatus { font-size: 13px; color: #5542fa; margin: 6px 0 16px; display: none; }
+#ocrStatus { font-size: 13px; color: var(--highlight); margin: 6px 0 16px; display: none; }
 #ocrStatus.done { color: #1a7f37; }
 #ocrStatus.error { color: #c0341d; }
 
@@ -81,6 +123,14 @@ textarea { resize: vertical; min-height: 44px; }
 .bottomRow .genBtn { flex-shrink: 0; margin-bottom: 20px; }
 
 #outputWrap[hidden] { display: none; }
+/* Same bouncy entrance every time this section un-hides (each "產生 HTML" click). */
+#outputWrap:not([hidden]) {
+  animation: fadeSlideUp 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 #htmlOutput {
   width: 100%;
   height: 160px;
@@ -89,23 +139,23 @@ textarea { resize: vertical; min-height: 44px; }
   white-space: pre;
 }
 .copyBtn {
-  background: #5542fa; color: #fff; border: none; padding: 10px 20px;
-  border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;
+  background: #fff; color: var(--highlight); border: 1.5px solid var(--highlight); padding: 10px 20px;
+  border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer;
 }
-.copyBtn:hover { background: #4433e0; }
+.copyBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
 .copied { color: #1a7f37; font-size: 13px; margin-left: 10px; }
 
 #wpPreviewWrap { margin-top: 20px; }
-#wpPreviewWrap .frameLabel { font-size: 12px; color: #888; margin-bottom: 6px; }
+#wpPreviewWrap .frameLabel { font-size: 12px; color: var(--foreground); opacity: 0.6; margin-bottom: 6px; }
 .opacityControls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 10px; font-size: 13px; }
-.opacityControls label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; }
+.opacityControls label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; color: var(--foreground); }
 .opacityControls button {
-  padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc;
-  background: #fff; cursor: pointer; font-size: 13px;
+  padding: 6px 12px; border-radius: 6px; border: 1.5px solid var(--highlight);
+  background: #fff; color: var(--highlight); cursor: pointer; font-size: 13px; font-weight: 700;
 }
-.opacityControls button:hover { background: #f0f0f0; }
+.opacityControls button:hover { background: var(--highlight); color: var(--highlight-foreground); }
 #wpPreviewFrame {
-  width: 100%; height: 320px; border: 1px solid #ddd; border-radius: 10px;
+  width: 100%; height: 320px; border: 1px solid var(--border); border-radius: 10px;
   background: #fff;
 }
 
@@ -119,7 +169,7 @@ textarea { resize: vertical; min-height: 44px; }
   container-type: inline-size;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   background: #fafafa;
 }
 #editorImg { display: block; width: 100%; height: auto; }
@@ -130,8 +180,8 @@ textarea { resize: vertical; min-height: 44px; }
   align-items: center;
   outline: 1px dashed transparent;
 }
-.ovBox:hover { outline-color: rgba(85,66,250,0.5); }
-.ovBox.selected { outline: 2px solid #5542fa; }
+.ovBox:hover { outline-color: color-mix(in srgb, var(--highlight) 50%, transparent); }
+.ovBox.selected { outline: 2px solid var(--highlight); }
 .ovBoxText {
   width: 100%; height: 100%;
   font-weight: 700;
@@ -148,9 +198,9 @@ textarea { resize: vertical; min-height: 44px; }
   position: absolute; top: -10px; left: -10px;
   width: 20px; height: 20px;
   border-radius: 50%;
-  border: 1px solid #5542fa;
+  border: 1px solid var(--highlight);
   background: #fff;
-  color: #5542fa;
+  color: var(--highlight);
   font-size: 11px;
   line-height: 1;
   cursor: move;
@@ -160,7 +210,7 @@ textarea { resize: vertical; min-height: 44px; }
   padding: 0;
   touch-action: none;
 }
-.ovMoveHandle:hover { background: #5542fa; color: #fff; }
+.ovMoveHandle:hover { background: var(--highlight); color: #fff; }
 .ovDeleteBtn {
   position: absolute;
   top: -10px; right: -10px;
@@ -182,7 +232,7 @@ textarea { resize: vertical; min-height: 44px; }
   position: absolute;
   width: 12px; height: 12px;
   border-radius: 3px;
-  border: 1px solid #5542fa;
+  border: 1px solid var(--highlight);
   background: #fff;
   display: none;
   touch-action: none;
@@ -196,8 +246,8 @@ textarea { resize: vertical; min-height: 44px; }
 #editorPanel {
   width: 220px;
   flex-shrink: 0;
-  background: #f6f6f6;
-  border: 1px solid #ddd;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
 }
