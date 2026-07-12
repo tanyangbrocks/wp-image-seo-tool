@@ -61,11 +61,12 @@ powershell -ExecutionPolicy Bypass -File docs\archive-done.ps1
 ## 核心邏輯摘要（修改前先讀這段，不要憑空猜測行為）
 
 1. 使用者上傳圖片 → 讀取 natural width/height，畫進 offscreen canvas 供後續像素取樣
-2. OCR 辨識：預設 Tesseract.js（`chi_tra+eng`，CDN 載入，離線可用但辨識力對花俏字體較弱）；若使用者勾選進階設定並填了金鑰，改打 Google Cloud Vision `TEXT_DETECTION`，失敗時自動退回 Tesseract（不會讓整個流程卡死）
-3. Google Vision 回傳的是逐字座標，`groupWordsIntoLines()` 依 Y 座標鄰近程度群組成行，模擬 Tesseract 原生就有的 `data.lines` 結構，讓兩個引擎共用同一套下游處理
-4. 每一行偵測到的文字都會用 `extractTextColor()` 抓真實顏色：用 Otsu 閾值法把框框內像素分兩群（假設面積較小的那群是文字本身），平均該群的**原始 RGB**（不是只判斷黑白）
-5. 位置/大小用**百分比**（相對圖片 natural width/height）+ CSS `container-type: inline-size` 搭配 `cqw` 單位做字級，確保疊字在圖片被縮放時仍維持正確比例
-6. Alt 欄位留空時不產生輸出；使用者一輸入 Alt，`updateOutput()` 就即時（不用按鈕）重新產生完整可複製貼上的 HTML
+2. OCR 辨識：預設 Tesseract.js（`chi_tra+eng`，CDN 載入，離線可用但辨識力對花俏字體較弱，且會把照片紋理/雜訊信心滿滿地誤判成文字）；若使用者勾選進階設定並填了金鑰，改打 Google Cloud Vision `TEXT_DETECTION`，失敗時自動退回 Tesseract（不會讓整個流程卡死）
+3. **Tesseract 結果會先過濾信心分數**：`MIN_LINE_CONFIDENCE = 60`，低於此門檻的行直接丟棄——這是修真實照片背景誤判出大量假文字行的關鍵修法，不要移除或大幅調低這層過濾（見「最新完成」歷史紀錄裡的診斷過程）。Google Vision 路徑目前沒有套用這層過濾。
+4. Google Vision 回傳的是逐字座標，`groupWordsIntoLines()` 依 Y 座標鄰近程度群組成行，模擬 Tesseract 原生就有的 `data.lines` 結構，讓兩個引擎共用同一套下游處理
+5. 每一行偵測到的文字都會用 `extractTextColor()` 抓真實顏色：用 Otsu 閾值法把框框內像素分兩群（假設面積較小的那群是文字本身），平均該群的**原始 RGB**（不是只判斷黑白）
+6. 位置/大小用**百分比**（相對圖片 natural width/height）+ CSS `container-type: inline-size` 搭配 `cqw` 單位做字級，確保疊字在圖片被縮放時仍維持正確比例
+7. Alt 欄位留空時不產生輸出；使用者一輸入 Alt，`updateOutput()` 就即時（不用按鈕）重新產生完整可複製貼上的 HTML
 
 ## 測試方式
 
