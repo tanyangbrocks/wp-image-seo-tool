@@ -46,6 +46,20 @@
   .checkboxRow { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; }
   .checkboxRow input { margin: 0; }
   .smallNote { color: #888; font-size: 12px; line-height: 1.5; margin-top: -8px; margin-bottom: 14px; }
+  #languageList { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+  #languageList .checkboxRow { margin-bottom: 8px; width: 130px; }
+  .genBtn {
+    background: #5542fa; color: #fff; border: none; padding: 12px 24px;
+    border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .genBtn:hover { background: #4433e0; }
+  .genBtn:disabled { background: #aaa; cursor: not-allowed; }
+  #wpPreviewWrap { display: none; margin-top: 20px; }
+  #wpPreviewWrap .frameLabel { font-size: 12px; color: #888; margin-bottom: 6px; }
+  #wpPreviewFrame {
+    width: 100%; height: 420px; border: 1px solid #ddd; border-radius: 10px;
+    background: #fff;
+  }
   #ocrStatus { font-size: 13px; color: #5542fa; margin: 6px 0 16px; display: none; }
   #ocrStatus.done { color: #1a7f37; }
   #ocrStatus.error { color: #c0341d; }
@@ -79,7 +93,6 @@
     font-size: 12px;
     white-space: pre;
   }
-  #outputPlaceholder { color: #999; font-size: 14px; padding: 10px 0; }
   .copyBtn {
     background: #5542fa; color: #fff; border: none; padding: 10px 20px;
     border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;
@@ -93,9 +106,16 @@
 <h1>WordPress 疊字圖片產生器</h1>
 <p class="hint">
   上傳圖片後會自動 OCR 辨識圖片裡的文字，連同文字在圖片上的<b>位置、大小、實際顏色</b>一起還原成疊在圖片上的真 HTML 文字（可被選取），顏色是分析原圖文字像素抓出來的真實色碼，不是只判斷黑白。<br>
-  這些都自動處理好，<b>只留 Alt 欄位空著給你自己填</b>——填了 Alt，下面就會自動產生完整的 HTML。<br>
+  自動處理好之後，<b>填 Alt 描述再按「產生 HTML」</b>，就會產生完整 HTML，同時顯示 WordPress 會怎麼渲染它的預覽。<br>
   <b>需要連網</b>（第一次使用會下載辨識模型，之後同語言不用再下載）。
 </p>
+
+<details class="advanced" open>
+  <summary>語言設定：勾選圖片裡包含的語言（影響辨識依據，勾越少通常辨識越快越準）</summary>
+  <div class="body">
+    <div id="languageList"></div>
+  </div>
+</details>
 
 <details class="advanced">
   <summary>進階設定：使用自己的 API 金鑰提升辨識準確度（選填）</summary>
@@ -131,14 +151,19 @@
 <div class="panel" id="altPanel" style="display:none;">
   <label for="altInput">2. Alt 文字（自己填，圖片的無障礙/SEO 描述，可以跟畫面上疊的文字不一樣）</label>
   <textarea id="altInput" placeholder="例如：夏季新品促銷海報"></textarea>
+  <button class="genBtn" id="generateBtn" disabled>產生 HTML</button>
 </div>
 
-<div class="panel" id="outputWrap">
-  <label>3. 完整 HTML（填了 Alt 後自動產生，複製貼到 WordPress「自訂 HTML」區塊）</label>
-  <div id="outputPlaceholder">請先在上面填入 Alt 文字…</div>
-  <textarea id="htmlOutput" readonly style="display:none;"></textarea>
-  <button class="copyBtn" id="copyBtn" style="display:none;">複製 HTML</button>
+<div class="panel" id="outputWrap" style="display:none;">
+  <label>3. 完整 HTML（複製貼到 WordPress「自訂 HTML」區塊）</label>
+  <textarea id="htmlOutput" readonly></textarea>
+  <button class="copyBtn" id="copyBtn">複製 HTML</button>
   <span class="copied" id="copiedMsg" style="display:none;">已複製 ✓</span>
+
+  <div id="wpPreviewWrap">
+    <div class="frameLabel">WordPress 依據上面這段 HTML 會產生的畫面預覽（直接渲染那段 HTML 本身，不是憑印象模擬的）：</div>
+    <iframe id="wpPreviewFrame" title="WordPress 渲染預覽"></iframe>
+  </div>
 </div>
 
 <script>
@@ -148,14 +173,46 @@ const previewWrap = document.getElementById('previewWrap');
 const previewImg = document.getElementById('previewImg');
 const altPanel = document.getElementById('altPanel');
 const altInput = document.getElementById('altInput');
+const generateBtn = document.getElementById('generateBtn');
 const outputWrap = document.getElementById('outputWrap');
-const outputPlaceholder = document.getElementById('outputPlaceholder');
 const htmlOutput = document.getElementById('htmlOutput');
 const copyBtn = document.getElementById('copyBtn');
 const copiedMsg = document.getElementById('copiedMsg');
 const useCloudOcr = document.getElementById('useCloudOcr');
 const apiKeyInput = document.getElementById('apiKeyInput');
 const rememberKey = document.getElementById('rememberKey');
+const languageList = document.getElementById('languageList');
+const wpPreviewWrap = document.getElementById('wpPreviewWrap');
+const wpPreviewFrame = document.getElementById('wpPreviewFrame');
+
+// Tesseract language codes + Google Vision's languageHints codes (different
+// code systems, so each entry carries both) + display label. Fewer selected
+// languages = smaller/faster model download for Tesseract and less
+// character-shape ambiguity for both engines, so this defaults to just the
+// two most common ones rather than everything.
+const LANGUAGES = [
+  { tesseract: 'chi_tra', vision: 'zh-Hant', label: '繁體中文', defaultOn: true },
+  { tesseract: 'chi_sim', vision: 'zh-Hans', label: '简体中文', defaultOn: false },
+  { tesseract: 'eng', vision: 'en', label: 'English', defaultOn: true },
+  { tesseract: 'jpn', vision: 'ja', label: '日本語', defaultOn: false },
+  { tesseract: 'kor', vision: 'ko', label: '한국어', defaultOn: false },
+  { tesseract: 'rus', vision: 'ru', label: 'Русский', defaultOn: false },
+  { tesseract: 'deu', vision: 'de', label: 'Deutsch', defaultOn: false },
+  { tesseract: 'fra', vision: 'fr', label: 'Français', defaultOn: false },
+  { tesseract: 'spa', vision: 'es', label: 'Español', defaultOn: false }
+];
+
+for (const lang of LANGUAGES) {
+  const row = document.createElement('div');
+  row.className = 'checkboxRow';
+  const id = 'lang_' + lang.tesseract;
+  row.innerHTML = `<input type="checkbox" id="${id}" ${lang.defaultOn ? 'checked' : ''} /><label for="${id}" style="margin:0;">${lang.label}</label>`;
+  languageList.appendChild(row);
+}
+
+function getSelectedLanguages() {
+  return LANGUAGES.filter((lang) => document.getElementById('lang_' + lang.tesseract).checked);
+}
 
 // Restore a remembered key (only ever written to *this browser's* local
 // storage by the checkbox below - never embedded in the shared HTML file
@@ -304,7 +361,7 @@ function groupWordsIntoLines(words) {
 
 // Recognizes text via the user's own Google Cloud Vision API key. Returns
 // the same shape Tesseract's lines produce: [{ text, x0, y0, x1, y1 }].
-async function recognizeWithGoogleVision(base64DataUrl, apiKey) {
+async function recognizeWithGoogleVision(base64DataUrl, apiKey, visionLangHints) {
   const base64Content = base64DataUrl.split(',')[1];
   const res = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
@@ -312,7 +369,8 @@ async function recognizeWithGoogleVision(base64DataUrl, apiKey) {
     body: JSON.stringify({
       requests: [{
         image: { content: base64Content },
-        features: [{ type: 'TEXT_DETECTION' }]
+        features: [{ type: 'TEXT_DETECTION' }],
+        imageContext: { languageHints: visionLangHints }
       }]
     })
   });
@@ -373,33 +431,50 @@ ${lineDivs}
 </div>`;
 }
 
-function updateOutput() {
+function generateAndPreview() {
   const alt = altInput.value.trim();
-  if (!alt) {
-    outputPlaceholder.style.display = 'block';
-    htmlOutput.style.display = 'none';
-    copyBtn.style.display = 'none';
-    return;
-  }
-  outputPlaceholder.style.display = 'none';
-  htmlOutput.style.display = 'block';
-  copyBtn.style.display = 'inline-block';
-  htmlOutput.value = buildFinalHtml(alt);
+  if (!alt) return;
+
+  const html = buildFinalHtml(alt);
+  htmlOutput.value = html;
+  outputWrap.style.display = 'block';
+
+  // Renders the *actual* generated HTML string in an isolated document
+  // (srcdoc), not the app's own live overlay state - this is what WordPress
+  // would really produce from pasting that HTML, catching any bugs in
+  // buildFinalHtml() itself (e.g. escaping) that the live preview wouldn't.
+  wpPreviewFrame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;}</style></head><body>${html}</body></html>`;
+  wpPreviewWrap.style.display = 'block';
 }
 
-altInput.addEventListener('input', updateOutput);
+altInput.addEventListener('input', () => {
+  generateBtn.disabled = !altInput.value.trim();
+});
+
+generateBtn.addEventListener('click', generateAndPreview);
 
 imageInput.addEventListener('change', async () => {
   const file = imageInput.files[0];
   if (!file) return;
+
+  const selectedLanguages = getSelectedLanguages();
+  if (!selectedLanguages.length) {
+    ocrStatus.className = 'error';
+    ocrStatus.style.display = 'block';
+    ocrStatus.textContent = '請至少勾選一種語言再上傳圖片';
+    imageInput.value = '';
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = async (e) => {
     imageDataUrl = e.target.result;
     detectedLines = [];
     altInput.value = '';
+    generateBtn.disabled = true;
     altPanel.style.display = 'none';
     outputWrap.style.display = 'none';
+    wpPreviewWrap.style.display = 'none';
     previewWrap.style.display = 'none';
 
     ocrStatus.className = '';
@@ -426,10 +501,13 @@ imageInput.addEventListener('change', async () => {
         let rawLines = null;
         const wantsCloud = useCloudOcr.checked && apiKeyInput.value.trim();
 
+        const tesseractLangString = selectedLanguages.map((l) => l.tesseract).join('+');
+        const visionLangHints = selectedLanguages.map((l) => l.vision);
+
         if (wantsCloud) {
           try {
             ocrStatus.textContent = '正在用 Google Cloud Vision 辨識圖片中的文字與位置…';
-            rawLines = await recognizeWithGoogleVision(imageDataUrl, apiKeyInput.value.trim());
+            rawLines = await recognizeWithGoogleVision(imageDataUrl, apiKeyInput.value.trim(), visionLangHints);
           } catch (cloudErr) {
             // Fall back to the offline engine rather than dead-ending the
             // whole flow on a bad/expired key or network hiccup.
@@ -440,8 +518,10 @@ imageInput.addEventListener('change', async () => {
 
         if (!rawLines) {
           if (!wantsCloud) ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
-          // chi_tra+eng: 同時辨識繁體中文與英文，涵蓋常見情境
-          const { data } = await Tesseract.recognize(imageDataUrl, 'chi_tra+eng', {
+          // Only load/use the languages the user actually checked - fewer
+          // languages means a smaller model download and less ambiguity
+          // between similarly-shaped characters across scripts.
+          const { data } = await Tesseract.recognize(imageDataUrl, tesseractLangString, {
             logger: (m) => {
               if (m.status === 'recognizing text') {
                 ocrStatus.textContent = `正在辨識圖片中的文字與位置…${Math.round(m.progress * 100)}%`;
@@ -493,8 +573,6 @@ imageInput.addEventListener('change', async () => {
       }
 
       altPanel.style.display = 'block';
-      outputWrap.style.display = 'block';
-      updateOutput();
     };
     img.src = imageDataUrl;
   };
