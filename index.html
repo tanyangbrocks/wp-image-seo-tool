@@ -81,9 +81,44 @@
 
   <div id="wpPreviewWrap">
     <div class="frameLabel">WordPress 依據上面這段 HTML 會產生的畫面預覽（直接渲染那段 HTML 本身，不是憑印象模擬的）：</div>
-    <iframe id="wpPreviewFrame" title="WordPress 渲染預覽"></iframe>
+    <div class="opacityControls">
+      <label>底圖透明度 <input type="range" id="previewBgOpacity" min="0" max="100" value="100" /></label>
+      <label>疊字透明度 <input type="range" id="previewOverlayOpacity" min="0" max="100" value="100" /></label>
+      <span class="smallNote" style="margin:0;">（純預覽用，不影響實際產生的 HTML）</span>
+    </div>
+    <div id="wpPreviewFrameWrap">
+      <iframe id="wpPreviewFrame" title="WordPress 渲染預覽"></iframe>
+      <button type="button" id="manualEditBtn" title="雙擊預覽區也可以打開">✎ 手動編輯</button>
+    </div>
   </div>
 </div>
+
+<dialog id="editorDialog">
+  <div class="editorToolbar">
+    <strong>手動編輯疊字</strong>
+    <button type="button" id="addLineBtn">＋ 新增文字方塊</button>
+    <label class="checkboxRow" style="margin:0;"><input type="checkbox" id="allTransparentToggle" /> 全部文字改透明</label>
+    <label style="margin:0;">底圖透明度 <input type="range" id="editorBgOpacity" min="0" max="100" value="100" /></label>
+    <span class="editorToolbarSpacer"></span>
+    <button type="button" id="cancelEditorBtn">取消</button>
+    <button type="button" class="genBtn" id="saveEditorBtn">儲存</button>
+  </div>
+  <p class="smallNote">點選畫布上的文字方塊即可選取、拖曳改位置；直接在方塊上打字可以修改文字內容。</p>
+  <div id="editorBody">
+    <div id="editorCanvasWrap">
+      <img id="editorImg" alt="" />
+    </div>
+    <div id="editorPanel" style="display:none;">
+      <label for="panelFontSize">字級</label>
+      <input type="range" id="panelFontSize" min="0.5" max="30" step="0.1" />
+      <label for="panelColor">顏色</label>
+      <input type="color" id="panelColor" />
+      <label for="panelOpacity">透明度</label>
+      <input type="range" id="panelOpacity" min="0" max="100" />
+      <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
+    </div>
+  </div>
+</dialog>
 
 <script type="module" src="js/main.js"></script>
 

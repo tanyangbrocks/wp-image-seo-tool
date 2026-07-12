@@ -5,6 +5,7 @@ import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR } from './ocr-paddle.js';
 import { buildFinalHtml } from './html-builder.js';
 import { renderPreview } from './preview.js';
+import { openEditor } from './editor.js';
 
 const imageInput = document.getElementById('imageInput');
 const ocrStatus = document.getElementById('ocrStatus');
@@ -27,6 +28,9 @@ const paddleScriptSelect = document.getElementById('paddleScriptSelect');
 const engineRadios = document.getElementsByName('engineChoice');
 const wpPreviewWrap = document.getElementById('wpPreviewWrap');
 const wpPreviewFrame = document.getElementById('wpPreviewFrame');
+const previewBgOpacity = document.getElementById('previewBgOpacity');
+const previewOverlayOpacity = document.getElementById('previewOverlayOpacity');
+const manualEditBtn = document.getElementById('manualEditBtn');
 
 for (const lang of LANGUAGES) {
   const row = document.createElement('div');
@@ -109,6 +113,54 @@ altInput.addEventListener('input', () => {
 });
 
 generateBtn.addEventListener('click', generateAndPreview);
+
+// The two preview-only opacity sliders operate directly on the iframe's
+// rendered DOM, not on htmlOutput/detectedLines - each srcdoc write creates
+// a brand new document, so both the base-opacity cache and the dblclick
+// listener below must be re-attached on every 'load', which also resets the
+// sliders to 100% as required ("重新按產生 HTML 時拉桿重置回 100%").
+wpPreviewFrame.addEventListener('load', () => {
+  const doc = wpPreviewFrame.contentDocument;
+  if (!doc) return;
+
+  previewBgOpacity.value = 100;
+  previewOverlayOpacity.value = 100;
+  doc.querySelectorAll('.ovText').forEach((el) => {
+    el.dataset.baseOpacity = el.style.opacity || '1';
+  });
+
+  doc.addEventListener('dblclick', () => {
+    openEditor(detectedLines, imageDataUrl, handleEditorSave);
+  });
+});
+
+previewBgOpacity.addEventListener('input', () => {
+  const doc = wpPreviewFrame.contentDocument;
+  const img = doc && doc.querySelector('img');
+  if (img) img.style.opacity = String(Number(previewBgOpacity.value) / 100);
+});
+
+previewOverlayOpacity.addEventListener('input', () => {
+  const doc = wpPreviewFrame.contentDocument;
+  if (!doc) return;
+  // Scales each line's own saved opacity by the slider fraction rather than
+  // overwriting it outright, so per-block opacity differences (set in the
+  // manual editor) stay visible while "peeking" through the overlay.
+  const factor = Number(previewOverlayOpacity.value) / 100;
+  doc.querySelectorAll('.ovText').forEach((el) => {
+    el.style.opacity = String(Number(el.dataset.baseOpacity ?? '1') * factor);
+  });
+});
+
+function handleEditorSave(newLines) {
+  detectedLines = newLines;
+  renderPreview(previewWrap, detectedLines);
+  generateAndPreview();
+}
+
+manualEditBtn.addEventListener('click', () => {
+  openEditor(detectedLines, imageDataUrl, handleEditorSave);
+});
 
 imageInput.addEventListener('change', async () => {
   const file = imageInput.files[0];

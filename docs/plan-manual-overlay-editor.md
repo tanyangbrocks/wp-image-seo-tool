@@ -93,10 +93,23 @@ function saveEditor() {
 
 ## 六、分階段實作步驟
 
-- [ ] Phase A — 預覽區透明度拉桿：UI（兩條 range input）+ 直接操作 `wpPreviewFrame.contentDocument` 內元素 style，不動 `htmlOutput`
-- [ ] Phase B — 編輯介面觸發：雙擊預覽 iframe + 「手動編輯」按鈕（右下角，疊在預覽區上），兩者都開啟同一個 `<dialog>`
-- [ ] Phase C — 編輯介面畫布：依 `editableLines` 畫出可點選的文字方塊（含 `opacity` 樣式），點擊 = 選取+開編輯面板，拖曳（pointer events）= 改位置；**文字內容直接在方塊本身用 `contenteditable` 原地編輯**（不是面板裡的 textarea）
-- [ ] Phase D — 編輯面板：字級/顏色/**透明度**（新增，逐方塊各自的 `opacity`）的輸入控制項，即時反映到畫布上對應方塊；刪除方塊按鈕；**「新增文字方塊」按鈕 + `createLine()`**（新增，插入無 OCR 來源的空白方塊，寬高自動撐開）
-- [ ] Phase E — 編輯介面自己的底圖透明度拉桿（維持純預覽，不存檔）+「全部文字改透明」全域開關（存檔時批次把所有方塊 `opacity` 覆蓋成 0，底層值不變、關掉能各自復原）
-- [ ] Phase F — 儲存流程：`editableLines` 寫回 `detectedLines`（套用「全部改透明」的批次覆蓋），呼叫既有產生邏輯更新 `htmlOutput`/外層預覽（`buildFinalHtml()` 的行 `<div>` 樣式新增 `opacity: ${line.opacity};`），關閉編輯介面
-- [ ] Phase G — 驗證：拖曳位置、原地編輯文字、改字級/顏色/**透明度**、刪除方塊、**新增文字方塊**（插入後可拖曳/編輯/刪除，行為跟 OCR 來源方塊一致）、全部改透明開關開/關，各自存檔後檢查 `htmlOutput` 內容正確反映編輯結果（尤其逐方塊 `opacity` 值要各自獨立，不是全部同一個值）；確認取消編輯（不按儲存直接關閉）不會動到原本的 `detectedLines`；確認全部改透明開關存檔後每個方塊 `opacity` 都是 0，關掉開關後每個方塊恢復自己原本設定的透明度（不是恢復成同一個值，也不需要另外還原顏色）
+- [x] Phase A — 預覽區透明度拉桿：UI（兩條 range input）+ 直接操作 `wpPreviewFrame.contentDocument` 內元素 style，不動 `htmlOutput`
+- [x] Phase B — 編輯介面觸發：雙擊預覽 iframe + 「手動編輯」按鈕（右下角，疊在預覽區上），兩者都開啟同一個 `<dialog>`
+- [x] Phase C — 編輯介面畫布：依 `editableLines` 畫出可點選的文字方塊（含 `opacity` 樣式），點擊 = 選取+開編輯面板，拖曳（pointer events）= 改位置；**文字內容直接在方塊本身用 `contenteditable` 原地編輯**（不是面板裡的 textarea）
+- [x] Phase D — 編輯面板：字級/顏色/**透明度**（新增，逐方塊各自的 `opacity`）的輸入控制項，即時反映到畫布上對應方塊；刪除方塊按鈕；**「新增文字方塊」按鈕 + `createLine()`**（新增，插入無 OCR 來源的空白方塊，寬高自動撐開）
+- [x] Phase E — 編輯介面自己的底圖透明度拉桿（維持純預覽，不存檔）+「全部文字改透明」全域開關（存檔時批次把所有方塊 `opacity` 覆蓋成 0，底層值不變、關掉能各自復原）
+- [x] Phase F — 儲存流程：`editableLines` 寫回 `detectedLines`（套用「全部改透明」的批次覆蓋），呼叫既有產生邏輯更新 `htmlOutput`/外層預覽（`buildFinalHtml()` 的行 `<div>` 樣式新增 `opacity: ${line.opacity};`），關閉編輯介面
+- [x] Phase G — 驗證：拖曳位置、原地編輯文字、改字級/顏色/**透明度**、刪除方塊、**新增文字方塊**（插入後可拖曳/編輯/刪除，行為跟 OCR 來源方塊一致）、全部改透明開關開/關，各自存檔後檢查 `htmlOutput` 內容正確反映編輯結果（尤其逐方塊 `opacity` 值要各自獨立，不是全部同一個值）；確認取消編輯（不按儲存直接關閉）不會動到原本的 `detectedLines`；確認全部改透明開關存檔後每個方塊 `opacity` 都是 0，關掉開關後每個方塊恢復自己原本設定的透明度（不是恢復成同一個值，也不需要另外還原顏色）
+
+## 七、實作結果與驗證記錄（2026-07-12）
+
+七個階段全部完成。實作時發現並修正計畫沒有明確提到的一個邊界案例：**用方塊自己的「×」刪除鈕刪掉「非目前選取中」的方塊時，`selectedIndex` 需要跟著陣列位移調整**（例如選取中第 3 個方塊，卻用滑鼠點掉第 1 個方塊的「×」，若不調整 `selectedIndex`，面板會錯誤地指向陣列位移後、原本第 4 個方塊的資料）——`deleteLine()` 加了 `else if (selectedIndex > index) selectedIndex -= 1` 處理這個情況，已驗證修正有效（見下方測試記錄）。
+
+**架構決策**：新增文字方塊（無 OCR 邊界框可繼承）跟既有 OCR 來源方塊在渲染/輸出上用不同的 sizing 分支——`widthPct`/`heightPct` 為 `null` 時輸出 `width:auto;height:auto;white-space:pre`（跟著內容自然撐開），非 null 時維持原本 `nowrap;overflow:hidden` 的固定尺寸行為。**只有新增方塊採用這個分支，既有 OCR 方塊的尺寸邏輯完全沒有改動**——避免動到已驗證過的預設輸出行為（超出計畫明確要求的範圍）。`js/html-builder.js`/`js/preview.js` 都依此分支。
+
+**驗證方式**：用 `DataTransfer` 模擬上傳走完整 PaddleOCR 辨識流程，開真實瀏覽器測試：
+- Phase A：底圖/疊字透明度拉桿正確直接操作 `wpPreviewFrame.contentDocument` 內元素（不影響 `htmlOutput.value`）；疊字滑桿用「乘上各方塊自己原有 opacity」而非直接覆蓋，確認逐方塊 opacity 差異在拉桿未滿 100% 時仍然保留比例；每次 `srcdoc` 重新載入時（`load` 事件）滑桿正確重置回 100% 且重新快取 `data-baseOpacity`
+- Phase B：「手動編輯」按鈕與雙擊 `wpPreviewFrame.contentDocument` 內容兩種觸發方式都能正確開啟 `<dialog>`（用真實 `PointerEvent`/`MouseEvent` 派發測試，不是只檢查程式碼存在）
+- Phase C/D：點選方塊正確帶出面板目前值（含 `rgb↔hex` 顏色轉換往返一致，例如 `rgb(41, 68, 144)` ↔ `#294490`）；用合成 `PointerEvent`（`pointerId`/`isPrimary` 正確設置）模擬真實拖曳，位置百分比正確更新且拖曳中/後 `contentEditable` 正確關閉/恢復；面板調字級/顏色/透明度即時反映到畫布方塊；「新增文字方塊」正確插入、自動選取、自動聚焦並全選文字方便直接輸入取代預設「新文字」
+- Phase E/F：全部改透明開關勾選後存檔，`htmlOutput` 對應行 `opacity: 0`（即使面板當時顯示 75%），符合計畫「批次覆蓋、不動 `editableLines` 底層值」的設計；「取消」按鈕關閉對話框後 `htmlOutput`/`detectedLines` 完全不變（位元對位元相同字串）
+- 全程用 `read_console_messages` 確認 console 無錯誤訊息

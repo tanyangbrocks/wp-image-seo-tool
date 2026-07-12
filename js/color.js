@@ -66,3 +66,18 @@ export function extractTextColor(ctx, x0, y0, x1, y1) {
     shadow: textBrightness > 140 ? '0 1px 3px rgba(0,0,0,0.55)' : '0 1px 3px rgba(255,255,255,0.55)'
   };
 }
+
+// The manual editor's color picker (<input type="color">) only accepts hex,
+// but detected/stored colors are "rgb(r, g, b)" strings - convert both ways.
+export function rgbToHex(rgbString) {
+  const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgbString || '');
+  if (!m) return '#000000';
+  const toHex = (n) => Number(n).toString(16).padStart(2, '0');
+  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
+}
+
+export function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return 'rgb(0, 0, 0)';
+  return `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})`;
+}
