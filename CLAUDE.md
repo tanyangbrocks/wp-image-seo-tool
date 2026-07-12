@@ -42,15 +42,33 @@ powershell -ExecutionPolicy Bypass -File docs\archive-done.ps1
 
 功能完成 + `實作進度.md` 同步 = 一個 commit。不要把進度更新單獨拆成獨立 commit。
 
-## 架構現況與判斷原則
+## 架構現況與判斷原則（2026-07-12 重構）
 
-目前是**單一 `index.html`**（HTML/CSS/JS 全部寫在一起，~500 行），這是刻意的選擇，不是還沒整理：
-- 原始需求是「單檔、雙擊即可用、不需要建置」，拆成多檔案通常代表要引入 bundler（Vite/esbuild）把檔案重新打包成一個，對這個規模的專案是不對等的複雜度投資
-- 現有程式碼已經用具名函式做內部分工（`otsuThreshold`／`extractTextColor`／`groupWordsIntoLines`／`recognizeWithGoogleVision`／`renderPreview`／`buildFinalHtml`），可讀性不是問題
+已從「單一 `index.html`（HTML/CSS/JS 全部寫在一起）」拆成多檔案，原因：PaddleOCR 評估計畫（新增第三種 OCR 引擎互相切換）跟手動編輯介面計畫（可視化調整疊字樣式）都命中了原先訂的拆檔門檻，繼續塞單檔會難以維護。
 
-**什麼時候該重新考慮拆檔/引入建置工具**：功能明顯變複雜到單檔難以維護時再拆，例如：新增多個 OCR 引擎選項互相切換、批次處理多張圖片、可視化調整疊字樣式的進階編輯介面。不要在還沒到這個門檻前主動拆檔案。
+**改用原生 ES modules，不是 bundler**：`<script type="module" src="js/main.js">` + 檔案間用相對路徑 `import`/`export`，瀏覽器原生支援，不需要 Vite/webpack 這類建置工具，`index.html` 本身沒有任何建置步驟。
 
-**CLAUDE、gitignore 這類專案治理檔案**跟上面的「程式碼要不要拆檔」是兩回事——前者幾乎零成本、隨時該補齊；後者才需要衡量門檻，不要混為一談。
+```
+wp-image-seo-tool/
+  index.html          結構 + <link>/<script type="module"> 兩個引用
+  css/style.css        原本的內嵌 <style> 搬出來
+  js/
+    languages.js        LANGUAGES 陣列
+    color.js             otsuThreshold／extractTextColor
+    ocr-tesseract.js      MIN_LINE_CONFIDENCE／recognizeWithTesseract（信心過濾邏輯在這）
+    ocr-vision.js          groupWordsIntoLines／recognizeWithGoogleVision
+    html-builder.js         escapeHtml／buildFinalHtml
+    preview.js                renderPreview
+    main.js                   DOM 綁定、事件、狀態（imageDataUrl/detectedLines 等）、把上面模組串起來
+```
+
+`Tesseract` 物件是 CDN `<script>`（非 module）掛在 `window` 上的全域變數，`ocr-tesseract.js` 直接引用它，不用額外 import。
+
+🔴 **代價**：放棄了原本「雙擊 `index.html` 直接開啟」的能力——ES modules 在 `file://` 協定下會被瀏覽器 CORS 擋掉，必須透過 http server（本機測試用 `.claude/launch.json` 的 `wp-image-seo-tool-dev`，或部署後的 Vercel）開啟。這是使用者已確認的取捨（2026-07-12）。
+
+**之後新增功能時**：新的 OCR 引擎（例如 PaddleOCR）比照 `ocr-vision.js` 的模式開一個新檔案，輸出同樣的 `[{text,x0,y0,x1,y1}]` 格式；手動編輯介面比照 `preview.js` 的模式開 `editor.js`。不要把新邏輯塞回 `main.js` 讓它重新肥大。
+
+**CLAUDE、gitignore 這類專案治理檔案**跟「程式碼要不要拆檔」是兩回事——前者幾乎零成本、隨時該補齊。
 
 ## 🔴 安全規則：API 金鑰絕對不能寫死進程式碼
 

@@ -1,0 +1,202 @@
+import { LANGUAGES } from './languages.js';
+import { extractTextColor } from './color.js';
+import { recognizeWithGoogleVision } from './ocr-vision.js';
+import { recognizeWithTesseract } from './ocr-tesseract.js';
+import { buildFinalHtml } from './html-builder.js';
+import { renderPreview } from './preview.js';
+
+const imageInput = document.getElementById('imageInput');
+const ocrStatus = document.getElementById('ocrStatus');
+const previewWrap = document.getElementById('previewWrap');
+const previewImg = document.getElementById('previewImg');
+const altPanel = document.getElementById('altPanel');
+const altInput = document.getElementById('altInput');
+const generateBtn = document.getElementById('generateBtn');
+const outputWrap = document.getElementById('outputWrap');
+const htmlOutput = document.getElementById('htmlOutput');
+const copyBtn = document.getElementById('copyBtn');
+const copiedMsg = document.getElementById('copiedMsg');
+const useCloudOcr = document.getElementById('useCloudOcr');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const rememberKey = document.getElementById('rememberKey');
+const languageList = document.getElementById('languageList');
+const wpPreviewWrap = document.getElementById('wpPreviewWrap');
+const wpPreviewFrame = document.getElementById('wpPreviewFrame');
+
+for (const lang of LANGUAGES) {
+  const row = document.createElement('div');
+  row.className = 'checkboxRow';
+  const id = 'lang_' + lang.tesseract;
+  row.innerHTML = `<input type="checkbox" id="${id}" ${lang.defaultOn ? 'checked' : ''} /><label for="${id}" style="margin:0;">${lang.label}</label>`;
+  languageList.appendChild(row);
+}
+
+function getSelectedLanguages() {
+  return LANGUAGES.filter((lang) => document.getElementById('lang_' + lang.tesseract).checked);
+}
+
+// Restore a remembered key (only ever written to *this browser's* local
+// storage by the checkbox below - never embedded in the shared HTML file
+// or sent anywhere except directly to Google's API from this page).
+const savedKey = localStorage.getItem('wpOverlayGen_visionApiKey');
+if (savedKey) {
+  apiKeyInput.value = savedKey;
+  rememberKey.checked = true;
+  useCloudOcr.checked = true;
+}
+rememberKey.addEventListener('change', () => {
+  if (rememberKey.checked && apiKeyInput.value.trim()) {
+    localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
+  } else {
+    localStorage.removeItem('wpOverlayGen_visionApiKey');
+  }
+});
+apiKeyInput.addEventListener('input', () => {
+  if (rememberKey.checked) localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
+});
+
+let imageDataUrl = null;
+let naturalWidth = 0;
+let naturalHeight = 0;
+let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSizeCqw, color, shadow }
+
+function generateAndPreview() {
+  const alt = altInput.value.trim();
+  if (!alt) return;
+
+  const html = buildFinalHtml(imageDataUrl, alt, detectedLines);
+  htmlOutput.value = html;
+  outputWrap.style.display = 'block';
+
+  // Renders the *actual* generated HTML string in an isolated document
+  // (srcdoc), not the app's own live overlay state - this is what WordPress
+  // would really produce from pasting that HTML, catching any bugs in
+  // buildFinalHtml() itself (e.g. escaping) that the live preview wouldn't.
+  wpPreviewFrame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;}</style></head><body>${html}</body></html>`;
+  wpPreviewWrap.style.display = 'block';
+}
+
+altInput.addEventListener('input', () => {
+  generateBtn.disabled = !altInput.value.trim();
+});
+
+generateBtn.addEventListener('click', generateAndPreview);
+
+imageInput.addEventListener('change', async () => {
+  const file = imageInput.files[0];
+  if (!file) return;
+
+  const selectedLanguages = getSelectedLanguages();
+  if (!selectedLanguages.length) {
+    ocrStatus.className = 'error';
+    ocrStatus.style.display = 'block';
+    ocrStatus.textContent = '請至少勾選一種語言再上傳圖片';
+    imageInput.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    imageDataUrl = e.target.result;
+    detectedLines = [];
+    altInput.value = '';
+    generateBtn.disabled = true;
+    altPanel.style.display = 'none';
+    outputWrap.style.display = 'none';
+    wpPreviewWrap.style.display = 'none';
+    previewWrap.style.display = 'none';
+
+    ocrStatus.className = '';
+    ocrStatus.style.display = 'block';
+    ocrStatus.textContent = '載入圖片中…';
+
+    const img = new Image();
+    img.onload = async () => {
+      naturalWidth = img.naturalWidth;
+      naturalHeight = img.naturalHeight;
+
+      // Offscreen canvas for sampling the real text color behind each detected line.
+      const canvas = document.createElement('canvas');
+      canvas.width = naturalWidth;
+      canvas.height = naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      previewImg.src = imageDataUrl;
+      previewWrap.style.display = 'block';
+
+      ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
+      try {
+        let rawLines = null;
+        const wantsCloud = useCloudOcr.checked && apiKeyInput.value.trim();
+
+        const tesseractLangString = selectedLanguages.map((l) => l.tesseract).join('+');
+        const visionLangHints = selectedLanguages.map((l) => l.vision);
+
+        if (wantsCloud) {
+          try {
+            ocrStatus.textContent = '正在用 Google Cloud Vision 辨識圖片中的文字與位置…';
+            rawLines = await recognizeWithGoogleVision(imageDataUrl, apiKeyInput.value.trim(), visionLangHints);
+          } catch (cloudErr) {
+            // Fall back to the offline engine rather than dead-ending the
+            // whole flow on a bad/expired key or network hiccup.
+            ocrStatus.textContent = `Google Cloud Vision 辨識失敗（${cloudErr.message}），改用離線辨識…`;
+            rawLines = null;
+          }
+        }
+
+        if (!rawLines) {
+          if (!wantsCloud) ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
+          // Only load/use the languages the user actually checked - fewer
+          // languages means a smaller model download and less ambiguity
+          // between similarly-shaped characters across scripts.
+          rawLines = await recognizeWithTesseract(imageDataUrl, tesseractLangString, (progress) => {
+            ocrStatus.textContent = `正在辨識圖片中的文字與位置…${Math.round(progress * 100)}%`;
+          });
+        }
+
+        detectedLines = rawLines.filter((l) => l.text.trim()).map((l) => {
+          const { x0, y0, x1, y1 } = l;
+          const { color, shadow } = extractTextColor(ctx, x0, y0, x1, y1);
+          return {
+            text: l.text.trim(),
+            leftPct: (x0 / naturalWidth) * 100,
+            topPct: (y0 / naturalHeight) * 100,
+            widthPct: ((x1 - x0) / naturalWidth) * 100,
+            heightPct: ((y1 - y0) / naturalHeight) * 100,
+            // Font size as a % of image WIDTH (cqw): since the image scales
+            // uniformly (width:100%; height:auto), a size expressed this way
+            // stays proportional to the original bounding box at any render size.
+            fontSizeCqw: ((y1 - y0) / naturalWidth) * 100 * 0.85,
+            color,
+            shadow
+          };
+        });
+
+        renderPreview(previewWrap, detectedLines);
+
+        if (detectedLines.length) {
+          ocrStatus.className = 'done';
+          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字並已還原到對應位置`;
+        } else {
+          ocrStatus.className = 'error';
+          ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來）';
+        }
+      } catch (err) {
+        ocrStatus.className = 'error';
+        ocrStatus.textContent = '辨識失敗（可能是網路問題，模型下載不了）：' + err.message;
+      }
+
+      altPanel.style.display = 'block';
+    };
+    img.src = imageDataUrl;
+  };
+  reader.readAsDataURL(file);
+});
+
+copyBtn.addEventListener('click', async () => {
+  htmlOutput.select();
+  await navigator.clipboard.writeText(htmlOutput.value);
+  copiedMsg.style.display = 'inline';
+  setTimeout(() => { copiedMsg.style.display = 'none'; }, 2000);
+});
