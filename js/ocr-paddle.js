@@ -17,19 +17,42 @@ export const MIN_CONFIDENCE_PADDLE = 0.3;
 
 // One service instance per script model, lazily created and cached across
 // images so the (multi-MB) model asset is only downloaded once per session.
+// Caches the in-flight *promise*, not just the resolved service - stored
+// synchronously before the first await, so a background preload racing a
+// real recognize() call (see preloadDefaultModel()) share one download
+// instead of triggering two redundant ones.
 const serviceCache = new Map();
 
-async function getService(scriptKey) {
+function getService(scriptKey) {
   if (serviceCache.has(scriptKey)) return serviceCache.get(scriptKey);
 
-  const mod = await import(/* webpackIgnore: true */ PPU_PADDLE_CDN);
-  const scriptDef = PADDLE_SCRIPTS.find((s) => s.key === scriptKey) || PADDLE_SCRIPTS.find((s) => s.key === PADDLE_DEFAULT_SCRIPT);
-  const options = scriptDef.preset ? { model: mod[scriptDef.preset] } : undefined;
+  const promise = (async () => {
+    const mod = await import(/* webpackIgnore: true */ PPU_PADDLE_CDN);
+    const scriptDef = PADDLE_SCRIPTS.find((s) => s.key === scriptKey) || PADDLE_SCRIPTS.find((s) => s.key === PADDLE_DEFAULT_SCRIPT);
+    const options = scriptDef.preset ? { model: mod[scriptDef.preset] } : undefined;
 
-  const service = new mod.PaddleOcrService(options);
-  await service.initialize();
-  serviceCache.set(scriptKey, service);
-  return service;
+    const service = new mod.PaddleOcrService(options);
+    await service.initialize();
+    return service;
+  })().catch((err) => {
+    // Don't let a failed preload (or a failed real attempt) permanently wedge
+    // this scriptKey - clear the cache so the next call retries from scratch.
+    serviceCache.delete(scriptKey);
+    throw err;
+  });
+
+  serviceCache.set(scriptKey, promise);
+  return promise;
+}
+
+// Best-effort background warm-up: starts the model download+init as soon as
+// the page loads instead of waiting for the user's first upload, so the
+// (multi-second) cold start (docs/plan-paddleocr-evaluation.md Phase A) is
+// already done - or well underway - by the time it's actually needed.
+// Errors are swallowed here; the real recognize call surfaces (and can
+// retry, since getService() clears failed entries) any problem normally.
+export function preloadDefaultModel() {
+  getService(PADDLE_DEFAULT_SCRIPT).catch(() => {});
 }
 
 // Returns the same shape the other engines produce: [{ text, x0, y0, x1, y1 }].

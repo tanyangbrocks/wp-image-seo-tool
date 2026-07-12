@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <title>WordPress 疊字圖片產生器</title>
+<!-- PaddleOCR (default engine) loads its JS module from jsdelivr and its
+     model weights from these two GitHub hosts (see js/ocr-paddle.js) -
+     preconnecting now overlaps DNS/TLS setup with the rest of page load,
+     shaving time off whenever the actual fetches start. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="preconnect" href="https://media.githubusercontent.com" crossorigin />
+<link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin />
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <link rel="stylesheet" href="css/style.css" />
 </head>

@@ -2,7 +2,7 @@ import { LANGUAGES, PADDLE_SCRIPTS, PADDLE_DEFAULT_SCRIPT } from './languages.js
 import { extractTextColor } from './color.js';
 import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
-import { recognizeWithPaddleOCR } from './ocr-paddle.js';
+import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
 import { buildFinalHtml } from './html-builder.js';
 import { renderPreview } from './preview.js';
 import { openEditor } from './editor.js';
@@ -86,6 +86,20 @@ rememberKey.addEventListener('change', () => {
 apiKeyInput.addEventListener('input', () => {
   if (rememberKey.checked) localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
 });
+
+// Warm up PaddleOCR's model download+init in the background as soon as the
+// page loads (after the savedKey check above, so a returning Vision user
+// doesn't get this triggered pointlessly) rather than waiting for the first
+// upload to pay that cold-start cost. requestIdleCallback lets initial
+// render finish first; falls back to a short timeout on browsers that lack it.
+if (getSelectedEngine() === 'paddle') {
+  // A timeout is required here, not just a nicety: browsers throttle
+  // requestIdleCallback hard (sometimes indefinitely) in hidden/background
+  // tabs, which would defeat the point of preloading for anyone who opens
+  // this page in a background tab.
+  const runWhenIdle = window.requestIdleCallback || ((cb) => setTimeout(cb, 200));
+  runWhenIdle(() => preloadDefaultModel(), { timeout: 2000 });
+}
 
 let imageDataUrl = null;
 let naturalWidth = 0;
