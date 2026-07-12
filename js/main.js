@@ -4,14 +4,12 @@ import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
 import { buildFinalHtml } from './html-builder.js';
-import { renderPreview } from './preview.js';
-import { openEditor } from './editor.js';
+import { mountEditor } from './editor.js';
 
 const imageInput = document.getElementById('imageInput');
 const ocrStatus = document.getElementById('ocrStatus');
 const previewWrap = document.getElementById('previewWrap');
 const previewImg = document.getElementById('previewImg');
-const altPanel = document.getElementById('altPanel');
 const altInput = document.getElementById('altInput');
 const generateBtn = document.getElementById('generateBtn');
 const outputWrap = document.getElementById('outputWrap');
@@ -26,11 +24,11 @@ const visionKeyPanel = document.getElementById('visionKeyPanel');
 const paddleScriptPanel = document.getElementById('paddleScriptPanel');
 const paddleScriptSelect = document.getElementById('paddleScriptSelect');
 const engineRadios = document.getElementsByName('engineChoice');
-const wpPreviewWrap = document.getElementById('wpPreviewWrap');
 const wpPreviewFrame = document.getElementById('wpPreviewFrame');
 const previewBgOpacity = document.getElementById('previewBgOpacity');
 const previewOverlayOpacity = document.getElementById('previewOverlayOpacity');
-const manualEditBtn = document.getElementById('manualEditBtn');
+const settingsToggleBtn = document.getElementById('settingsToggleBtn');
+const settingsPanel = document.getElementById('settingsPanel');
 
 for (const lang of LANGUAGES) {
   const row = document.createElement('div');
@@ -65,6 +63,28 @@ function updateEnginePanels() {
 }
 for (const radio of engineRadios) radio.addEventListener('change', updateEnginePanels);
 updateEnginePanels();
+
+// Settings menu is closed by default and opens as a floating panel overlaid
+// on top of the page (not an in-flow <details> that pushes content down) -
+// closes on outside click or Esc.
+function closeSettingsPanel() {
+  settingsPanel.hidden = true;
+  settingsToggleBtn.setAttribute('aria-expanded', 'false');
+}
+settingsToggleBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const willOpen = settingsPanel.hidden;
+  settingsPanel.hidden = !willOpen;
+  settingsToggleBtn.setAttribute('aria-expanded', String(willOpen));
+});
+document.addEventListener('click', (e) => {
+  if (settingsPanel.hidden) return;
+  if (settingsPanel.contains(e.target) || e.target === settingsToggleBtn) return;
+  closeSettingsPanel();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !settingsPanel.hidden) closeSettingsPanel();
+});
 
 // Restore a remembered key (only ever written to *this browser's* local
 // storage by the checkbox below - never embedded in the shared HTML file
@@ -104,35 +124,34 @@ if (getSelectedEngine() === 'paddle') {
 let imageDataUrl = null;
 let naturalWidth = 0;
 let naturalHeight = 0;
-let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSizeCqw, color, shadow }
+let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSizeCqw, color, shadow, opacity }
 
 function generateAndPreview() {
   const alt = altInput.value.trim();
-  if (!alt) return;
+  if (!alt || !imageDataUrl) return;
 
   const html = buildFinalHtml(imageDataUrl, alt, detectedLines);
   htmlOutput.value = html;
-  outputWrap.style.display = 'block';
+  outputWrap.hidden = false;
 
   // Renders the *actual* generated HTML string in an isolated document
   // (srcdoc), not the app's own live overlay state - this is what WordPress
   // would really produce from pasting that HTML, catching any bugs in
   // buildFinalHtml() itself (e.g. escaping) that the live preview wouldn't.
   wpPreviewFrame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;}</style></head><body>${html}</body></html>`;
-  wpPreviewWrap.style.display = 'block';
 }
 
 altInput.addEventListener('input', () => {
-  generateBtn.disabled = !altInput.value.trim();
+  generateBtn.disabled = !altInput.value.trim() || !imageDataUrl;
 });
 
 generateBtn.addEventListener('click', generateAndPreview);
 
 // The two preview-only opacity sliders operate directly on the iframe's
 // rendered DOM, not on htmlOutput/detectedLines - each srcdoc write creates
-// a brand new document, so both the base-opacity cache and the dblclick
-// listener below must be re-attached on every 'load', which also resets the
-// sliders to 100% as required ("重新按產生 HTML 時拉桿重置回 100%").
+// a brand new document, so the base-opacity cache below must be re-attached
+// on every 'load', which also resets the sliders to 100% as required
+// ("重新按產生 HTML 時拉桿重置回 100%").
 wpPreviewFrame.addEventListener('load', () => {
   const doc = wpPreviewFrame.contentDocument;
   if (!doc) return;
@@ -141,10 +160,6 @@ wpPreviewFrame.addEventListener('load', () => {
   previewOverlayOpacity.value = 100;
   doc.querySelectorAll('.ovText').forEach((el) => {
     el.dataset.baseOpacity = el.style.opacity || '1';
-  });
-
-  doc.addEventListener('dblclick', () => {
-    openEditor(detectedLines, imageDataUrl, handleEditorSave);
   });
 });
 
@@ -159,21 +174,11 @@ previewOverlayOpacity.addEventListener('input', () => {
   if (!doc) return;
   // Scales each line's own saved opacity by the slider fraction rather than
   // overwriting it outright, so per-block opacity differences (set in the
-  // manual editor) stay visible while "peeking" through the overlay.
+  // editor) stay visible while "peeking" through the overlay.
   const factor = Number(previewOverlayOpacity.value) / 100;
   doc.querySelectorAll('.ovText').forEach((el) => {
     el.style.opacity = String(Number(el.dataset.baseOpacity ?? '1') * factor);
   });
-});
-
-function handleEditorSave(newLines) {
-  detectedLines = newLines;
-  renderPreview(previewWrap, detectedLines);
-  generateAndPreview();
-}
-
-manualEditBtn.addEventListener('click', () => {
-  openEditor(detectedLines, imageDataUrl, handleEditorSave);
 });
 
 imageInput.addEventListener('change', async () => {
@@ -206,9 +211,7 @@ imageInput.addEventListener('change', async () => {
     detectedLines = [];
     altInput.value = '';
     generateBtn.disabled = true;
-    altPanel.style.display = 'none';
-    outputWrap.style.display = 'none';
-    wpPreviewWrap.style.display = 'none';
+    outputWrap.hidden = true;
     previewWrap.style.display = 'none';
 
     ocrStatus.className = '';
@@ -229,6 +232,10 @@ imageInput.addEventListener('change', async () => {
 
       previewImg.src = imageDataUrl;
       previewWrap.style.display = 'block';
+      // Shows the new image in the right-side editor immediately (with no
+      // boxes yet) rather than leaving the previous image's stale overlay
+      // visible while OCR is still running.
+      mountEditor([], imageDataUrl);
 
       ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
       try {
@@ -274,25 +281,30 @@ imageInput.addEventListener('change', async () => {
             // stays proportional to the original bounding box at any render size.
             fontSizeCqw: ((y1 - y0) / naturalWidth) * 100 * 0.85,
             color,
-            shadow
+            shadow,
+            opacity: 1
           };
         });
 
-        renderPreview(previewWrap, detectedLines);
+        // Mounts the live editing canvas immediately - the user can drag/
+        // resize/retype right away as a final positioning check, without
+        // waiting to click "產生 HTML" first (OCR bounding boxes are never
+        // pixel-perfect; this is the correction step for that).
+        mountEditor(detectedLines, imageDataUrl);
 
         if (detectedLines.length) {
           ocrStatus.className = 'done';
-          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字並已還原到對應位置`;
+          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字，右邊可以直接拖曳調整位置/大小`;
         } else {
           ocrStatus.className = 'error';
-          ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來）';
+          ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來；右邊仍可以手動新增文字方塊）';
         }
       } catch (err) {
         ocrStatus.className = 'error';
         ocrStatus.textContent = '辨識失敗（可能是網路問題，模型下載不了）：' + err.message;
       }
 
-      altPanel.style.display = 'block';
+      generateBtn.disabled = !altInput.value.trim() || !imageDataUrl;
     };
     img.src = imageDataUrl;
   };

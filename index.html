@@ -15,16 +15,19 @@
 </head>
 <body>
 
-<h1>WordPress 疊字圖片產生器</h1>
+<div class="headerRow">
+  <h1>WordPress 疊字圖片產生器</h1>
+  <span class="credit">Created by 彈羊如柳丁</span>
+</div>
 <p class="hint">
   上傳圖片後會自動 OCR 辨識圖片裡的文字，連同文字在圖片上的<b>位置、大小、實際顏色</b>一起還原成疊在圖片上的真 HTML 文字（可被選取），顏色是分析原圖文字像素抓出來的真實色碼，不是只判斷黑白。<br>
-  自動處理好之後，<b>填 Alt 描述再按「產生 HTML」</b>，就會產生完整 HTML，同時顯示 WordPress 會怎麼渲染它的預覽。<br>
+  辨識完成後<b>右邊會立刻出現可以直接調整的編輯畫布</b>（拖曳移動、選取後縮放、點文字直接打字修改），調好之後填 Alt 描述、按「產生 HTML」即可。<br>
   <b>需要連網</b>（第一次使用會下載辨識模型，之後同語言不用再下載）。
 </p>
 
-<details class="advanced" open>
-  <summary>辨識引擎與語言設定</summary>
-  <div class="body">
+<div class="settingsBar">
+  <button type="button" id="settingsToggleBtn" aria-expanded="false">⚙ 辨識引擎與語言設定</button>
+  <div id="settingsPanel" class="popoverPanel" hidden>
     <div class="checkboxRow">
       <input type="radio" name="engineChoice" id="engine_paddle" value="paddle" checked />
       <label for="engine_paddle" style="margin:0;">PaddleOCR（預設，免費離線；實測對照片背景/紋理誤判成文字的抵抗力比 Tesseract 好很多，詳見 <code>docs/plan-paddleocr-evaluation.md</code>）</label>
@@ -62,25 +65,52 @@
       </p>
     </div>
   </div>
-</details>
+</div>
 
-<div class="panel">
-  <label for="imageInput">1. 選擇圖片</label>
-  <input type="file" id="imageInput" accept="image/*" />
-  <div id="ocrStatus"></div>
+<div class="mainGrid">
+  <div class="panel">
+    <label for="imageInput">1. 選擇圖片</label>
+    <input type="file" id="imageInput" accept="image/*" />
+    <div id="ocrStatus"></div>
 
-  <div id="previewWrap">
-    <img id="previewImg" alt="" />
+    <div id="previewWrap">
+      <img id="previewImg" alt="" />
+    </div>
+  </div>
+
+  <div class="panel" id="editPanelWrap">
+    <label>圖片預覽、調整介面（拖曳移動把手改位置、選取後拖曳四角縮放、直接點文字打字修改）</label>
+    <div class="opacityControls">
+      <label>底圖透明度 <input type="range" id="editorBgOpacity" min="0" max="100" value="100" /></label>
+      <label class="checkboxRow" style="margin:0;"><input type="checkbox" id="allTransparentToggle" /> 全部文字改透明</label>
+      <button type="button" id="addLineBtn">＋ 新增文字方塊</button>
+    </div>
+    <div id="editorBody">
+      <div id="editorCanvasWrap">
+        <img id="editorImg" alt="" />
+      </div>
+      <div id="editorPanel" style="display:none;">
+        <label for="panelFontSize">字級</label>
+        <input type="range" id="panelFontSize" min="0.5" max="30" step="0.1" />
+        <label for="panelColor">顏色</label>
+        <input type="color" id="panelColor" />
+        <label for="panelOpacity">透明度</label>
+        <input type="range" id="panelOpacity" min="0" max="100" />
+        <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="panel" id="altPanel" style="display:none;">
-  <label for="altInput">2. Alt 文字（自己填，圖片的無障礙/SEO 描述，可以跟畫面上疊的文字不一樣）</label>
-  <textarea id="altInput" placeholder="例如：夏季新品促銷海報"></textarea>
+<div class="bottomRow">
+  <div class="panel" id="altPanel">
+    <label for="altInput">2. Alt 文字（自己填，圖片的無障礙/SEO 描述，可以跟畫面上疊的文字不一樣）</label>
+    <textarea id="altInput" placeholder="例如：夏季新品促銷海報"></textarea>
+  </div>
   <button class="genBtn" id="generateBtn" disabled>產生 HTML</button>
 </div>
 
-<div class="panel" id="outputWrap" style="display:none;">
+<div class="panel" id="outputWrap" hidden>
   <label>3. 完整 HTML（複製貼到 WordPress「自訂 HTML」區塊）</label>
   <textarea id="htmlOutput" readonly></textarea>
   <button class="copyBtn" id="copyBtn">複製 HTML</button>
@@ -93,39 +123,9 @@
       <label>疊字透明度 <input type="range" id="previewOverlayOpacity" min="0" max="100" value="100" /></label>
       <span class="smallNote" style="margin:0;">（純預覽用，不影響實際產生的 HTML）</span>
     </div>
-    <div id="wpPreviewFrameWrap">
-      <iframe id="wpPreviewFrame" title="WordPress 渲染預覽"></iframe>
-      <button type="button" id="manualEditBtn" title="雙擊預覽區也可以打開">✎ 手動編輯</button>
-    </div>
+    <iframe id="wpPreviewFrame" title="WordPress 渲染預覽"></iframe>
   </div>
 </div>
-
-<dialog id="editorDialog">
-  <div class="editorToolbar">
-    <strong>手動編輯疊字</strong>
-    <button type="button" id="addLineBtn">＋ 新增文字方塊</button>
-    <label class="checkboxRow" style="margin:0;"><input type="checkbox" id="allTransparentToggle" /> 全部文字改透明</label>
-    <label style="margin:0;">底圖透明度 <input type="range" id="editorBgOpacity" min="0" max="100" value="100" /></label>
-    <span class="editorToolbarSpacer"></span>
-    <button type="button" id="cancelEditorBtn">取消</button>
-    <button type="button" class="genBtn" id="saveEditorBtn">儲存</button>
-  </div>
-  <p class="smallNote">點選畫布上的文字方塊即可選取、拖曳改位置；直接在方塊上打字可以修改文字內容。</p>
-  <div id="editorBody">
-    <div id="editorCanvasWrap">
-      <img id="editorImg" alt="" />
-    </div>
-    <div id="editorPanel" style="display:none;">
-      <label for="panelFontSize">字級</label>
-      <input type="range" id="panelFontSize" min="0.5" max="30" step="0.1" />
-      <label for="panelColor">顏色</label>
-      <input type="color" id="panelColor" />
-      <label for="panelOpacity">透明度</label>
-      <input type="range" id="panelOpacity" min="0" max="100" />
-      <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
-    </div>
-  </div>
-</dialog>
 
 <script type="module" src="js/main.js"></script>
 

@@ -1,6 +1,5 @@
 import { rgbToHex, hexToRgb } from './color.js';
 
-const editorDialog = document.getElementById('editorDialog');
 const editorImg = document.getElementById('editorImg');
 const editorCanvasWrap = document.getElementById('editorCanvasWrap');
 const editorPanel = document.getElementById('editorPanel');
@@ -11,70 +10,81 @@ const deleteLineBtn = document.getElementById('deleteLineBtn');
 const addLineBtn = document.getElementById('addLineBtn');
 const allTransparentToggle = document.getElementById('allTransparentToggle');
 const editorBgOpacity = document.getElementById('editorBgOpacity');
-const cancelEditorBtn = document.getElementById('cancelEditorBtn');
-const saveEditorBtn = document.getElementById('saveEditorBtn');
 
-// editableLines is a deep copy of detectedLines - all editing happens here,
-// nothing touches the real data until saveEditor() writes it back. This is
-// what lets "cancel" discard every change with zero cleanup.
-let editableLines = [];
+// Edits here are immediate and permanent - this module operates directly on
+// the same array reference main.js owns (mutated in place with push/splice/
+// property assignment, never reassigned), so there's no separate "save" step
+// and nothing to reconcile back. main.js just reads this array's current
+// contents whenever it builds the output HTML.
+let detectedLines = [];
 let selectedIndex = null;
-let onSaveCallback = null;
 let dragState = null;
 
 function renderCanvas() {
-  editorCanvasWrap.querySelectorAll('.editorLineWrap').forEach((el) => el.remove());
+  editorCanvasWrap.querySelectorAll('.ovBox').forEach((el) => el.remove());
 
-  editableLines.forEach((line, index) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'editorLineWrap' + (index === selectedIndex ? ' selected' : '');
-    wrap.dataset.index = String(index);
-    wrap.style.left = line.leftPct + '%';
-    wrap.style.top = line.topPct + '%';
-    if (line.widthPct != null && line.heightPct != null) {
-      wrap.style.width = line.widthPct + '%';
-      wrap.style.height = line.heightPct + '%';
-    } else {
-      wrap.classList.add('autoSize');
-    }
+  detectedLines.forEach((line, index) => {
+    const box = document.createElement('div');
+    box.className = 'ovBox' + (index === selectedIndex ? ' selected' : '');
+    box.dataset.index = String(index);
+    box.style.left = line.leftPct + '%';
+    box.style.top = line.topPct + '%';
+    box.style.width = line.widthPct + '%';
+    box.style.height = line.heightPct + '%';
 
     const textEl = document.createElement('div');
-    textEl.className = 'editorLineText';
+    textEl.className = 'ovBoxText';
     textEl.contentEditable = 'true';
     textEl.textContent = line.text;
     textEl.style.fontSize = line.fontSizeCqw + 'cqw';
     textEl.style.color = line.color;
     textEl.style.textShadow = line.shadow;
-    textEl.style.opacity = String(line.opacity);
-    // Keeps editableLines in sync with the contenteditable box as the user
-    // types, so saveEditor() doesn't need a separate "read back all the
-    // text" pass over the DOM.
+    textEl.style.opacity = String(line.opacity ?? 1);
+    // Keeps detectedLines in sync with the contenteditable box as the user
+    // types. textEl is never toggled non-editable and never intercepted by
+    // drag logic (drag only starts from the separate .ovMoveHandle/
+    // .ovResizeHandle elements below) - clicking text always just edits it.
     textEl.addEventListener('input', () => {
-      editableLines[index].text = textEl.textContent;
+      line.text = textEl.textContent;
     });
+    textEl.addEventListener('focus', () => selectLine(index));
+
+    const moveHandle = document.createElement('button');
+    moveHandle.type = 'button';
+    moveHandle.className = 'ovMoveHandle';
+    moveHandle.title = '拖曳移動位置';
+    moveHandle.textContent = '✛';
 
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
-    delBtn.className = 'lineDeleteBtn';
-    delBtn.textContent = '×';
+    delBtn.className = 'ovDeleteBtn';
     delBtn.title = '刪除這個文字方塊';
+    delBtn.textContent = '×';
 
-    wrap.appendChild(textEl);
-    wrap.appendChild(delBtn);
-    editorCanvasWrap.appendChild(wrap);
+    box.appendChild(textEl);
+    box.appendChild(moveHandle);
+    box.appendChild(delBtn);
+    for (const corner of ['nw', 'ne', 'sw', 'se']) {
+      const handle = document.createElement('div');
+      handle.className = 'ovResizeHandle ' + corner;
+      handle.dataset.corner = corner;
+      box.appendChild(handle);
+    }
+
+    editorCanvasWrap.appendChild(box);
   });
 }
 
 function selectLine(index) {
   selectedIndex = index;
-  editorCanvasWrap.querySelectorAll('.editorLineWrap.selected').forEach((el) => el.classList.remove('selected'));
-  const wrap = editorCanvasWrap.querySelector(`.editorLineWrap[data-index="${index}"]`);
-  if (wrap) wrap.classList.add('selected');
+  editorCanvasWrap.querySelectorAll('.ovBox.selected').forEach((el) => el.classList.remove('selected'));
+  const box = editorCanvasWrap.querySelector(`.ovBox[data-index="${index}"]`);
+  if (box) box.classList.add('selected');
 
-  const line = editableLines[index];
+  const line = detectedLines[index];
   panelFontSize.value = line.fontSizeCqw;
   panelColor.value = rgbToHex(line.color);
-  panelOpacity.value = Math.round(line.opacity * 100);
+  panelOpacity.value = Math.round((line.opacity ?? 1) * 100);
   editorPanel.style.display = 'block';
 }
 
@@ -84,7 +94,7 @@ function hidePanel() {
 }
 
 function deleteLine(index) {
-  editableLines.splice(index, 1);
+  detectedLines.splice(index, 1);
   // The inline "×" badge can delete a box other than the currently selected
   // one - shift selectedIndex to keep pointing at the same underlying line
   // rather than whatever now occupies its old array slot.
@@ -96,97 +106,133 @@ function deleteLine(index) {
   renderCanvas();
 }
 
-function updateSelectedBoxStyle() {
-  if (selectedIndex == null) return;
-  const wrap = editorCanvasWrap.querySelector(`.editorLineWrap[data-index="${selectedIndex}"]`);
-  if (!wrap) return;
-  const textEl = wrap.querySelector('.editorLineText');
-  const line = editableLines[selectedIndex];
-  textEl.style.fontSize = line.fontSizeCqw + 'cqw';
-  textEl.style.color = line.color;
-  textEl.style.opacity = String(line.opacity);
+function updateBoxGeometry(index) {
+  const box = editorCanvasWrap.querySelector(`.ovBox[data-index="${index}"]`);
+  if (!box) return;
+  const line = detectedLines[index];
+  box.style.left = line.leftPct + '%';
+  box.style.top = line.topPct + '%';
+  box.style.width = line.widthPct + '%';
+  box.style.height = line.heightPct + '%';
 }
 
-// Click-to-select + pointer-drag-to-move share the same delegated listener
-// on the canvas so re-rendering the list (add/delete) never leaves stale
-// per-box listeners behind.
-editorCanvasWrap.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('.lineDeleteBtn')) return;
-  const wrap = e.target.closest('.editorLineWrap');
-  if (!wrap) return;
+function updateSelectedBoxStyle() {
+  if (selectedIndex == null) return;
+  const box = editorCanvasWrap.querySelector(`.ovBox[data-index="${selectedIndex}"]`);
+  if (!box) return;
+  const textEl = box.querySelector('.ovBoxText');
+  const line = detectedLines[selectedIndex];
+  textEl.style.fontSize = line.fontSizeCqw + 'cqw';
+  textEl.style.color = line.color;
+  textEl.style.opacity = String(line.opacity ?? 1);
+}
 
-  const index = Number(wrap.dataset.index);
+// Move/resize both start only from their dedicated handle elements (never
+// from the text itself), so there's no ambiguity between "click to place a
+// caret" and "drag to move/resize" - see docs/plan history for the bug this
+// structural separation replaced (a movement-threshold heuristic that
+// intermittently ate clicks and could leave a box stuck to the pointer).
+editorCanvasWrap.addEventListener('pointerdown', (e) => {
+  const moveHandle = e.target.closest('.ovMoveHandle');
+  const resizeHandle = e.target.closest('.ovResizeHandle');
+  if (!moveHandle && !resizeHandle) return;
+
+  const box = (moveHandle || resizeHandle).closest('.ovBox');
+  const index = Number(box.dataset.index);
   selectLine(index);
+  e.preventDefault();
 
   const rect = editorCanvasWrap.getBoundingClientRect();
+  const line = detectedLines[index];
+  const handle = moveHandle || resizeHandle;
+  handle.setPointerCapture(e.pointerId);
+
   dragState = {
+    type: moveHandle ? 'move' : 'resize',
+    corner: resizeHandle ? resizeHandle.dataset.corner : null,
     index,
-    wrap,
     pointerId: e.pointerId,
     startClientX: e.clientX,
     startClientY: e.clientY,
-    startLeftPct: editableLines[index].leftPct,
-    startTopPct: editableLines[index].topPct,
+    startLeftPct: line.leftPct,
+    startTopPct: line.topPct,
+    startWidthPct: line.widthPct,
+    startHeightPct: line.heightPct,
     canvasWidth: rect.width,
-    canvasHeight: rect.height,
-    dragging: false
+    canvasHeight: rect.height
   };
 });
 
+const MIN_BOX_PCT = 2;
+
 editorCanvasWrap.addEventListener('pointermove', (e) => {
   if (!dragState || e.pointerId !== dragState.pointerId) return;
-  const dx = e.clientX - dragState.startClientX;
-  const dy = e.clientY - dragState.startClientY;
-
-  // A small movement threshold before treating this as a drag (rather than
-  // a click) keeps plain clicks - placing a text caret, pressing the delete
-  // badge - from being interpreted as a zero-distance move.
-  if (!dragState.dragging && Math.hypot(dx, dy) < 5) return;
-  if (!dragState.dragging) {
-    dragState.dragging = true;
-    dragState.wrap.setPointerCapture(dragState.pointerId);
-    // Disable contenteditable while dragging so the browser's text-selection
-    // drag doesn't fight with the position drag.
-    dragState.wrap.querySelector('.editorLineText').contentEditable = 'false';
-  }
+  // Self-heals a stuck drag if a pointerup/pointercancel was ever missed
+  // (e.g. the button was released outside the window).
+  if (e.buttons === 0) { dragState = null; return; }
   e.preventDefault();
 
-  const newLeft = dragState.startLeftPct + (dx / dragState.canvasWidth) * 100;
-  const newTop = dragState.startTopPct + (dy / dragState.canvasHeight) * 100;
-  editableLines[dragState.index].leftPct = newLeft;
-  editableLines[dragState.index].topPct = newTop;
-  dragState.wrap.style.left = newLeft + '%';
-  dragState.wrap.style.top = newTop + '%';
+  const dxPct = ((e.clientX - dragState.startClientX) / dragState.canvasWidth) * 100;
+  const dyPct = ((e.clientY - dragState.startClientY) / dragState.canvasHeight) * 100;
+  const line = detectedLines[dragState.index];
+
+  if (dragState.type === 'move') {
+    line.leftPct = dragState.startLeftPct + dxPct;
+    line.topPct = dragState.startTopPct + dyPct;
+  } else {
+    const { startLeftPct: L, startTopPct: T, startWidthPct: W, startHeightPct: H, corner } = dragState;
+    if (corner === 'se') {
+      line.widthPct = Math.max(MIN_BOX_PCT, W + dxPct);
+      line.heightPct = Math.max(MIN_BOX_PCT, H + dyPct);
+    } else if (corner === 'sw') {
+      const newW = Math.max(MIN_BOX_PCT, W - dxPct);
+      line.leftPct = L + (W - newW);
+      line.widthPct = newW;
+      line.heightPct = Math.max(MIN_BOX_PCT, H + dyPct);
+    } else if (corner === 'ne') {
+      line.widthPct = Math.max(MIN_BOX_PCT, W + dxPct);
+      const newH = Math.max(MIN_BOX_PCT, H - dyPct);
+      line.topPct = T + (H - newH);
+      line.heightPct = newH;
+    } else {
+      const newW = Math.max(MIN_BOX_PCT, W - dxPct);
+      const newH = Math.max(MIN_BOX_PCT, H - dyPct);
+      line.leftPct = L + (W - newW);
+      line.topPct = T + (H - newH);
+      line.widthPct = newW;
+      line.heightPct = newH;
+    }
+  }
+  updateBoxGeometry(dragState.index);
 });
 
-window.addEventListener('pointerup', (e) => {
+function endDrag(e) {
   if (!dragState || e.pointerId !== dragState.pointerId) return;
-  if (dragState.dragging) {
-    dragState.wrap.querySelector('.editorLineText').contentEditable = 'true';
-  }
   dragState = null;
-});
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
 
 editorCanvasWrap.addEventListener('click', (e) => {
-  const delBtn = e.target.closest('.lineDeleteBtn');
+  const delBtn = e.target.closest('.ovDeleteBtn');
   if (!delBtn) return;
-  const wrap = delBtn.closest('.editorLineWrap');
-  deleteLine(Number(wrap.dataset.index));
+  const box = delBtn.closest('.ovBox');
+  deleteLine(Number(box.dataset.index));
 });
 
 panelFontSize.addEventListener('input', () => {
   if (selectedIndex == null) return;
-  editableLines[selectedIndex].fontSizeCqw = parseFloat(panelFontSize.value);
+  detectedLines[selectedIndex].fontSizeCqw = parseFloat(panelFontSize.value);
   updateSelectedBoxStyle();
 });
 panelColor.addEventListener('input', () => {
   if (selectedIndex == null) return;
-  editableLines[selectedIndex].color = hexToRgb(panelColor.value);
+  detectedLines[selectedIndex].color = hexToRgb(panelColor.value);
   updateSelectedBoxStyle();
 });
 panelOpacity.addEventListener('input', () => {
   if (selectedIndex == null) return;
-  editableLines[selectedIndex].opacity = Number(panelOpacity.value) / 100;
+  detectedLines[selectedIndex].opacity = Number(panelOpacity.value) / 100;
   updateSelectedBoxStyle();
 });
 deleteLineBtn.addEventListener('click', () => {
@@ -195,25 +241,27 @@ deleteLineBtn.addEventListener('click', () => {
 });
 
 addLineBtn.addEventListener('click', () => {
-  editableLines.push({
+  // No OCR bounding box to inherit - starts as a reasonable default
+  // rectangle the user can immediately drag/resize into place with the
+  // same handles as any other box (manual resize now always available,
+  // superseding the old OCR-box-only sizing model).
+  detectedLines.push({
     text: '新文字',
-    leftPct: 40,
-    topPct: 40,
-    // No OCR bounding box to inherit - sizes to its own content instead
-    // (see docs/plan-manual-overlay-editor.md "先維持自動").
-    widthPct: null,
-    heightPct: null,
+    leftPct: 38,
+    topPct: 38,
+    widthPct: 24,
+    heightPct: 8,
     fontSizeCqw: 4,
     color: 'rgb(255, 255, 255)',
     shadow: '0 1px 3px rgba(0,0,0,0.55)',
     opacity: 1
   });
-  const index = editableLines.length - 1;
+  const index = detectedLines.length - 1;
   renderCanvas();
   selectLine(index);
 
-  const wrap = editorCanvasWrap.querySelector(`.editorLineWrap[data-index="${index}"]`);
-  const textEl = wrap.querySelector('.editorLineText');
+  const box = editorCanvasWrap.querySelector(`.ovBox[data-index="${index}"]`);
+  const textEl = box.querySelector('.ovBoxText');
   textEl.focus();
   const range = document.createRange();
   range.selectNodeContents(textEl);
@@ -226,26 +274,32 @@ editorBgOpacity.addEventListener('input', () => {
   editorImg.style.opacity = String(Number(editorBgOpacity.value) / 100);
 });
 
-cancelEditorBtn.addEventListener('click', () => {
-  editorDialog.close();
+// Live batch toggle (no save/cancel to hide behind): checking it stashes
+// each line's current opacity in _prevOpacity and zeroes it out immediately;
+// unchecking restores each line's own stashed value, not a shared one.
+allTransparentToggle.addEventListener('change', () => {
+  if (allTransparentToggle.checked) {
+    detectedLines.forEach((line) => {
+      line._prevOpacity = line.opacity ?? 1;
+      line.opacity = 0;
+    });
+  } else {
+    detectedLines.forEach((line) => {
+      if (line._prevOpacity != null) {
+        line.opacity = line._prevOpacity;
+        delete line._prevOpacity;
+      }
+    });
+  }
+  renderCanvas();
+  if (selectedIndex != null) selectLine(selectedIndex);
 });
 
-saveEditorBtn.addEventListener('click', () => {
-  // "全部文字改透明" is a batch action applied only at save time - each
-  // line's own opacity value in editableLines is left untouched, so
-  // unchecking the toggle later (before saving again) restores each box's
-  // individually-set opacity rather than some shared value.
-  const finalLines = editableLines.map((line) => ({
-    ...line,
-    opacity: allTransparentToggle.checked ? 0 : line.opacity
-  }));
-  editorDialog.close();
-  if (onSaveCallback) onSaveCallback(finalLines);
-});
-
-export function openEditor(detectedLines, imageDataUrl, onSave) {
-  editableLines = detectedLines.map((line) => ({ ...line, opacity: line.opacity ?? 1 }));
-  onSaveCallback = onSave;
+// Called once per successful OCR run (and whenever the user re-uploads),
+// mounting the live editing canvas directly against the same detectedLines
+// array main.js will later serialize into the output HTML.
+export function mountEditor(lines, imageDataUrl) {
+  detectedLines = lines;
   selectedIndex = null;
   allTransparentToggle.checked = false;
   editorBgOpacity.value = 100;
@@ -254,5 +308,4 @@ export function openEditor(detectedLines, imageDataUrl, onSave) {
 
   renderCanvas();
   hidePanel();
-  editorDialog.showModal();
 }

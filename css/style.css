@@ -1,14 +1,17 @@
 * { box-sizing: border-box; }
 body {
   font-family: -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif;
-  max-width: 720px;
+  max-width: 1100px;
   margin: 40px auto;
   padding: 0 20px;
   color: #222;
   background: #f6f6f6;
 }
-h1 { font-size: 22px; }
+.headerRow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 22px; margin: 0; }
+.credit { font-size: 13px; color: #888; }
 p.hint { color: #666; font-size: 14px; line-height: 1.6; }
+
 .panel {
   background: #fff;
   border: 1px solid #ddd;
@@ -27,69 +30,57 @@ input[type="file"], input[type="password"], select, textarea {
   font-family: inherit;
 }
 textarea { resize: vertical; min-height: 44px; }
-details.advanced {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  padding: 14px 20px;
-  margin-bottom: 20px;
-}
-details.advanced summary { cursor: pointer; font-weight: 600; font-size: 14px; }
-details.advanced .body { margin-top: 14px; }
 .checkboxRow { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; }
 .checkboxRow input { margin: 0; }
 .smallNote { color: #888; font-size: 12px; line-height: 1.5; margin-top: -8px; margin-bottom: 14px; }
 #languageList { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 #languageList .checkboxRow { margin-bottom: 8px; width: 130px; }
+
 .genBtn {
   background: #5542fa; color: #fff; border: none; padding: 12px 24px;
   border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer;
 }
 .genBtn:hover { background: #4433e0; }
 .genBtn:disabled { background: #aaa; cursor: not-allowed; }
-#wpPreviewWrap { display: none; margin-top: 20px; }
-#wpPreviewWrap .frameLabel { font-size: 12px; color: #888; margin-bottom: 6px; }
-.opacityControls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 10px; font-size: 13px; }
-.opacityControls label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; }
-#wpPreviewFrameWrap { position: relative; }
-#wpPreviewFrame {
-  width: 100%; height: 420px; border: 1px solid #ddd; border-radius: 10px;
-  background: #fff;
+
+/* Collapsible settings menu: closed by default, opens as a floating panel
+   overlaid on top of the page instead of pushing the rest of the layout
+   down (unlike the old <details> element it replaced). */
+.settingsBar { position: relative; margin-bottom: 20px; }
+#settingsToggleBtn {
+  padding: 10px 16px; border-radius: 8px; border: 1px solid #ddd;
+  background: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
 }
-#manualEditBtn {
-  position: absolute; right: 12px; bottom: 12px;
-  background: #fff; border: 1px solid #ccc; border-radius: 6px;
-  padding: 6px 12px; font-size: 13px; cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+#settingsToggleBtn:hover { background: #f0f0f0; }
+.popoverPanel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  width: min(560px, 90vw);
+  background: #fff; border: 1px solid #ddd; border-radius: 10px;
+  padding: 16px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
 }
-#manualEditBtn:hover { background: #f0f0f0; }
+.popoverPanel[hidden] { display: none; }
+
+.mainGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 720px) { .mainGrid { grid-template-columns: 1fr; } }
+
 #ocrStatus { font-size: 13px; color: #5542fa; margin: 6px 0 16px; display: none; }
 #ocrStatus.done { color: #1a7f37; }
 #ocrStatus.error { color: #c0341d; }
 
 #previewWrap {
-  position: relative;
   width: 100%;
-  container-type: inline-size;
   display: none;
   margin-top: 10px;
   border-radius: 10px;
   overflow: hidden;
 }
 #previewImg { display: block; width: 100%; height: auto; }
-.textLine {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  font-weight: 700;
-  line-height: 1.05;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.textLine.autoSize { width: auto; height: auto; white-space: pre; overflow: visible; }
 
-#outputWrap { display: none; }
+.bottomRow { display: flex; align-items: flex-end; gap: 20px; }
+.bottomRow .panel { flex: 1; margin-bottom: 0; }
+.bottomRow .genBtn { flex-shrink: 0; margin-bottom: 20px; }
+
+#outputWrap[hidden] { display: none; }
 #htmlOutput {
   width: 100%;
   height: 160px;
@@ -104,50 +95,73 @@ details.advanced .body { margin-top: 14px; }
 .copyBtn:hover { background: #4433e0; }
 .copied { color: #1a7f37; font-size: 13px; margin-left: 10px; }
 
-#editorDialog {
-  width: min(92vw, 960px);
-  max-width: 92vw;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  padding: 20px;
+#wpPreviewWrap { margin-top: 20px; }
+#wpPreviewWrap .frameLabel { font-size: 12px; color: #888; margin-bottom: 6px; }
+.opacityControls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 10px; font-size: 13px; }
+.opacityControls label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; }
+.opacityControls button {
+  padding: 6px 12px; border-radius: 6px; border: 1px solid #ccc;
+  background: #fff; cursor: pointer; font-size: 13px;
+}
+.opacityControls button:hover { background: #f0f0f0; }
+#wpPreviewFrame {
+  width: 100%; height: 320px; border: 1px solid #ddd; border-radius: 10px;
   background: #fff;
 }
-#editorDialog::backdrop { background: rgba(0,0,0,0.5); }
-.editorToolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 10px; }
-.editorToolbar button { padding: 8px 14px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; font-size: 13px; }
-.editorToolbar button:hover { background: #f0f0f0; }
-.editorToolbar label { display: inline-flex; align-items: center; gap: 6px; font-weight: 400; font-size: 13px; }
-.editorToolbarSpacer { flex: 1; }
-#editorBody { display: flex; gap: 20px; align-items: flex-start; }
+
+/* Live editing canvas - always mounted once an image is uploaded, not a modal. */
+#editorBody { display: flex; gap: 16px; align-items: flex-start; }
 #editorCanvasWrap {
   position: relative;
   flex: 1;
   min-width: 0;
+  min-height: 120px;
   container-type: inline-size;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid #ddd;
+  background: #fafafa;
 }
 #editorImg { display: block; width: 100%; height: auto; }
-.editorLineWrap {
+
+.ovBox {
   position: absolute;
   display: flex;
   align-items: center;
-  cursor: move;
   outline: 1px dashed transparent;
-  touch-action: none;
 }
-.editorLineWrap.autoSize { width: auto; height: auto; }
-.editorLineWrap:hover { outline-color: rgba(85,66,250,0.5); }
-.editorLineWrap.selected { outline: 2px solid #5542fa; }
-.editorLineText {
+.ovBox:hover { outline-color: rgba(85,66,250,0.5); }
+.ovBox.selected { outline: 2px solid #5542fa; }
+.ovBoxText {
+  width: 100%; height: 100%;
   font-weight: 700;
   line-height: 1.05;
-  white-space: pre;
+  white-space: nowrap;
+  overflow: hidden;
   outline: none;
   cursor: text;
 }
-.lineDeleteBtn {
+/* Handles are separate elements from the text box, deliberately outside its
+   click/hit area - this is what keeps "click to type" and "drag to move/
+   resize" from ever being ambiguous (see docs on the bug this replaced). */
+.ovMoveHandle {
+  position: absolute; top: -10px; left: -10px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1px solid #5542fa;
+  background: #fff;
+  color: #5542fa;
+  font-size: 11px;
+  line-height: 1;
+  cursor: move;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  touch-action: none;
+}
+.ovMoveHandle:hover { background: #5542fa; color: #fff; }
+.ovDeleteBtn {
   position: absolute;
   top: -10px; right: -10px;
   width: 20px; height: 20px;
@@ -163,7 +177,22 @@ details.advanced .body { margin-top: 14px; }
   justify-content: center;
   padding: 0;
 }
-.lineDeleteBtn:hover { background: #c0341d; color: #fff; }
+.ovDeleteBtn:hover { background: #c0341d; color: #fff; }
+.ovResizeHandle {
+  position: absolute;
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  border: 1px solid #5542fa;
+  background: #fff;
+  display: none;
+  touch-action: none;
+}
+.ovBox.selected .ovResizeHandle { display: block; }
+.ovResizeHandle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+.ovResizeHandle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+.ovResizeHandle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+.ovResizeHandle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+
 #editorPanel {
   width: 220px;
   flex-shrink: 0;
