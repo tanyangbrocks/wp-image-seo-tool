@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>WordPress 疊字圖片產生器</title>
+<link rel="icon" type="image/png" href="assets/icon/orange-sheep.png" />
 <!-- PaddleOCR (default engine) loads its JS module from jsdelivr and its
      model weights from these two GitHub hosts (see js/ocr-paddle.js) -
      preconnecting now overlaps DNS/TLS setup with the rest of page load,
@@ -20,53 +21,54 @@
     <h1>讓圖片文字可選</h1>
     <p class="subtitle">令圖片上每個文字都被 WordPress 看見</p>
   </div>
-  <span class="credit">Created by 彈羊如柳丁</span>
-</div>
+  <div class="headerRight">
+    <span class="credit">Created by 彈羊如柳丁 <img src="assets/icon/orange-sheep.png" alt="" class="creditLogo" /></span>
+    <div class="settingsBar">
+      <button type="button" id="settingsToggleBtn" aria-expanded="false">⚙ 辨識引擎與語言設定</button>
+      <div id="settingsPanel" class="popoverPanel" hidden>
+        <div class="checkboxRow">
+          <input type="radio" name="engineChoice" id="engine_paddle" value="paddle" checked />
+          <label for="engine_paddle" style="margin:0;">PaddleOCR（預設，免費離線；實測對照片背景/紋理誤判成文字的抵抗力比 Tesseract 好很多，詳見 <code>docs/plan-paddleocr-evaluation.md</code>）</label>
+        </div>
+        <div class="checkboxRow">
+          <input type="radio" name="engineChoice" id="engine_tesseract" value="tesseract" />
+          <label for="engine_tesseract" style="margin:0;">Tesseract（免費離線，原本的引擎，留著當退路）</label>
+        </div>
+        <div class="checkboxRow">
+          <input type="radio" name="engineChoice" id="engine_vision" value="vision" />
+          <label for="engine_vision" style="margin:0;">Google Cloud Vision（需要自己的 API 金鑰，準確度最高，尤其對花俏字體）</label>
+        </div>
 
-<div class="settingsBar">
-  <button type="button" id="settingsToggleBtn" aria-expanded="false">⚙ 辨識引擎與語言設定</button>
-  <div id="settingsPanel" class="popoverPanel" hidden>
-    <div class="checkboxRow">
-      <input type="radio" name="engineChoice" id="engine_paddle" value="paddle" checked />
-      <label for="engine_paddle" style="margin:0;">PaddleOCR（預設，免費離線；實測對照片背景/紋理誤判成文字的抵抗力比 Tesseract 好很多，詳見 <code>docs/plan-paddleocr-evaluation.md</code>）</label>
-    </div>
-    <div class="checkboxRow">
-      <input type="radio" name="engineChoice" id="engine_tesseract" value="tesseract" />
-      <label for="engine_tesseract" style="margin:0;">Tesseract（免費離線，原本的引擎，留著當退路）</label>
-    </div>
-    <div class="checkboxRow">
-      <input type="radio" name="engineChoice" id="engine_vision" value="vision" />
-      <label for="engine_vision" style="margin:0;">Google Cloud Vision（需要自己的 API 金鑰，準確度最高，尤其對花俏字體）</label>
-    </div>
+        <div id="paddleScriptPanel">
+          <label for="paddleScriptSelect">書寫系統（大部分情況不用改，PaddleOCR 預設模型已經涵蓋中日英文+拉丁語系）</label>
+          <select id="paddleScriptSelect"></select>
+        </div>
 
-    <div id="paddleScriptPanel">
-      <label for="paddleScriptSelect">書寫系統（大部分情況不用改，PaddleOCR 預設模型已經涵蓋中日英文+拉丁語系）</label>
-      <select id="paddleScriptSelect"></select>
-    </div>
+        <div id="languageListPanel" style="display:none;">
+          <label>語言（影響辨識依據，勾越少通常辨識越快越準）</label>
+          <div id="languageList"></div>
+        </div>
 
-    <div id="languageListPanel" style="display:none;">
-      <label>語言（影響辨識依據，勾越少通常辨識越快越準）</label>
-      <div id="languageList"></div>
-    </div>
-
-    <div id="visionKeyPanel" style="display:none;">
-      <label for="apiKeyInput">你自己的 Google Cloud Vision API 金鑰</label>
-      <input type="password" id="apiKeyInput" placeholder="貼上你自己的金鑰（不會分享給任何人，只存在你自己的瀏覽器）" />
-      <div class="checkboxRow">
-        <input type="checkbox" id="rememberKey" />
-        <label for="rememberKey" style="margin:0;">記住這把金鑰（存在這台電腦的瀏覽器本機，下次不用重貼）</label>
+        <div id="visionKeyPanel" style="display:none;">
+          <label for="apiKeyInput">你自己的 Google Cloud Vision API 金鑰</label>
+          <input type="password" id="apiKeyInput" placeholder="貼上你自己的金鑰（不會分享給任何人，只存在你自己的瀏覽器）" />
+          <div class="checkboxRow">
+            <input type="checkbox" id="rememberKey" />
+            <label for="rememberKey" style="margin:0;">記住這把金鑰（存在這台電腦的瀏覽器本機，下次不用重貼）</label>
+          </div>
+          <p class="smallNote">
+            金鑰只會從你的瀏覽器直接打到 Google 的伺服器，不會經過任何第三方、也不會存進產生的 HTML 裡。
+            每個人要用這個功能都要貼自己的金鑰，不要把你的金鑰分享給別人。
+            辨識失敗時（金鑰錯誤/網路問題）會自動改用 PaddleOCR。
+          </p>
+        </div>
       </div>
-      <p class="smallNote">
-        金鑰只會從你的瀏覽器直接打到 Google 的伺服器，不會經過任何第三方、也不會存進產生的 HTML 裡。
-        每個人要用這個功能都要貼自己的金鑰，不要把你的金鑰分享給別人。
-        辨識失敗時（金鑰錯誤/網路問題）會自動改用 PaddleOCR。
-      </p>
     </div>
   </div>
 </div>
 
 <div class="mainGrid">
-  <div class="panel">
+  <div class="panel" id="uploadPanel">
     <label for="imageInput" class="sectionTitle">1. 選擇圖片</label>
     <input type="file" id="imageInput" accept="image/*" />
     <div id="ocrStatus"></div>
@@ -77,32 +79,20 @@
   </div>
 
   <div class="panel" id="editPanelWrap">
-    <label class="sectionTitle">圖片預覽、調整介面（拖曳移動把手改位置、選取後拖曳四角縮放、直接點文字打字修改）</label>
-    <div class="opacityControls">
-      <label>底圖透明度 <input type="range" id="editorBgOpacity" min="0" max="100" value="100" /></label>
-      <label class="checkboxRow" style="margin:0;"><input type="checkbox" id="allTransparentToggle" /> 全部文字改透明</label>
-      <button type="button" id="addLineBtn">＋ 新增文字方塊</button>
+    <label class="sectionTitle">圖片預覽</label>
+    <div id="previewCanvasWrap">
+      <img id="previewCanvasImg" alt="" />
+      <button type="button" id="openEditorBtn" title="開啟編輯視窗" aria-label="開啟編輯視窗" hidden>✎ 編輯</button>
     </div>
-    <div id="editorBody">
-      <div id="editorCanvasWrap" tabindex="-1">
-        <img id="editorImg" alt="" />
-      </div>
-      <div id="editorPanel" style="display:none;">
-        <label for="panelFontSize">字級</label>
-        <input type="range" id="panelFontSize" min="0.5" max="30" step="0.1" />
-        <label for="panelColor">顏色</label>
-        <input type="color" id="panelColor" />
-        <label for="panelOpacity">透明度</label>
-        <input type="range" id="panelOpacity" min="0" max="100" />
-        <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
-      </div>
+    <div class="opacityControls" id="previewOpacityControls" hidden>
+      <label>底圖不透明度 <input type="range" id="previewCanvasBgOpacity" min="0" max="100" value="100" /></label>
     </div>
   </div>
 </div>
 
 <div class="bottomRow">
   <div class="panel" id="altPanel">
-    <label for="altInput" class="sectionTitle">2. Alt 文字（自己填，圖片的無障礙/SEO 描述，可以跟畫面上疊的文字不一樣）</label>
+    <label for="altInput" class="sectionTitle">2. Alt 文字</label>
     <textarea id="altInput" placeholder="例如：夏季新品促銷海報"></textarea>
   </div>
   <button class="genBtn" id="generateBtn" disabled>產生 HTML</button>
@@ -121,13 +111,39 @@
   <div id="wpPreviewWrap">
     <div class="frameLabel">WordPress 依據上面這段 HTML 會產生的畫面預覽（直接渲染那段 HTML 本身，不是憑印象模擬的）：</div>
     <div class="opacityControls">
-      <label>底圖透明度 <input type="range" id="previewBgOpacity" min="0" max="100" value="100" /></label>
-      <label>疊字透明度 <input type="range" id="previewOverlayOpacity" min="0" max="100" value="100" /></label>
+      <label>底圖不透明度 <input type="range" id="previewBgOpacity" min="0" max="100" value="100" /></label>
+      <label>疊字不透明度 <input type="range" id="previewOverlayOpacity" min="0" max="100" value="100" /></label>
       <span class="smallNote" style="margin:0;">（純預覽用，不影響實際產生的 HTML）</span>
     </div>
     <iframe id="wpPreviewFrame" title="WordPress 渲染預覽"></iframe>
   </div>
 </div>
+
+<dialog id="editorDialog">
+  <div class="editorToolbar">
+    <strong>編輯疊字</strong>
+    <button type="button" id="addLineBtn">＋ 新增文字方塊</button>
+    <label class="checkboxRow" style="margin:0;"><input type="checkbox" id="allTransparentToggle" /> 全部文字改透明</label>
+    <label style="margin:0;">底圖不透明度 <input type="range" id="editorBgOpacity" min="0" max="100" value="100" /></label>
+    <span class="editorToolbarSpacer"></span>
+    <button type="button" id="closeEditorBtn">完成</button>
+  </div>
+  <p class="smallNote">點選畫布上的文字方塊即可選取、拖曳改位置；直接在方塊上打字可以修改文字內容。</p>
+  <div id="editorBody">
+    <div id="editorCanvasWrap" tabindex="-1">
+      <img id="editorImg" alt="" />
+    </div>
+    <div id="editorPanel" style="display:none;">
+      <label for="panelFontSize">字級</label>
+      <input type="range" id="panelFontSize" min="0.5" max="30" step="0.1" />
+      <label for="panelColor">顏色</label>
+      <input type="color" id="panelColor" />
+      <label for="panelOpacity">不透明度</label>
+      <input type="range" id="panelOpacity" min="0" max="100" />
+      <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
+    </div>
+  </div>
+</dialog>
 
 <script type="module" src="js/main.js"></script>
 

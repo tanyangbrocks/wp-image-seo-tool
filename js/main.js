@@ -4,12 +4,20 @@ import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
 import { buildFinalHtml } from './html-builder.js';
+import { renderPreview } from './preview.js';
 import { mountEditor } from './editor.js';
 
 const imageInput = document.getElementById('imageInput');
 const ocrStatus = document.getElementById('ocrStatus');
 const previewWrap = document.getElementById('previewWrap');
 const previewImg = document.getElementById('previewImg');
+const previewCanvasWrap = document.getElementById('previewCanvasWrap');
+const previewCanvasImg = document.getElementById('previewCanvasImg');
+const openEditorBtn = document.getElementById('openEditorBtn');
+const previewOpacityControls = document.getElementById('previewOpacityControls');
+const previewCanvasBgOpacity = document.getElementById('previewCanvasBgOpacity');
+const editorDialog = document.getElementById('editorDialog');
+const closeEditorBtn = document.getElementById('closeEditorBtn');
 const altInput = document.getElementById('altInput');
 const generateBtn = document.getElementById('generateBtn');
 const outputWrap = document.getElementById('outputWrap');
@@ -131,6 +139,34 @@ let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSiz
 // its state clobbered by the first one's now-stale results landing late.
 let uploadToken = 0;
 
+// The right-panel preview is read-only; actual editing happens in
+// #editorDialog, opened only via the edit button or a double-click on the
+// preview. mountEditor() populates the dialog's interactive canvas against
+// the same detectedLines array; closing the dialog re-renders the read-only
+// preview so it reflects whatever was changed (live edits, no save/cancel).
+function openEditor() {
+  mountEditor(detectedLines, imageDataUrl);
+  editorDialog.showModal();
+}
+function syncPreviewFromEditor() {
+  renderPreview(previewCanvasWrap, detectedLines);
+}
+openEditorBtn.addEventListener('click', openEditor);
+previewCanvasWrap.addEventListener('dblclick', openEditor);
+// The explicit "完成" button resyncs directly rather than relying solely on
+// the dialog's native 'close' event - kept the listener below too (it's the
+// only path that runs for Esc-key dismissal), but a button click shouldn't
+// depend on that event firing to do the one thing this button is for.
+closeEditorBtn.addEventListener('click', () => {
+  editorDialog.close();
+  syncPreviewFromEditor();
+});
+editorDialog.addEventListener('close', syncPreviewFromEditor);
+
+previewCanvasBgOpacity.addEventListener('input', () => {
+  previewCanvasImg.style.opacity = String(Number(previewCanvasBgOpacity.value) / 100);
+});
+
 function generateAndPreview() {
   const alt = altInput.value.trim();
   if (!alt || !imageDataUrl) return;
@@ -220,7 +256,8 @@ imageInput.addEventListener('change', async () => {
     altInput.value = '';
     generateBtn.disabled = true;
     outputWrap.hidden = true;
-    previewWrap.style.display = 'none';
+    openEditorBtn.hidden = true;
+    previewOpacityControls.hidden = true;
 
     ocrStatus.className = '';
     ocrStatus.style.display = 'block';
@@ -245,11 +282,16 @@ imageInput.addEventListener('change', async () => {
       ctx.drawImage(img, 0, 0);
 
       previewImg.src = imageDataUrl;
-      previewWrap.style.display = 'block';
-      // Shows the new image in the right-side editor immediately (with no
-      // boxes yet) rather than leaving the previous image's stale overlay
-      // visible while OCR is still running.
-      mountEditor([], imageDataUrl);
+      previewCanvasImg.src = imageDataUrl;
+      previewCanvasBgOpacity.value = 100;
+      previewCanvasImg.style.opacity = 1;
+      // Read-only preview only, no boxes yet - the interactive editor stays
+      // unmounted until openEditor() runs (button click or double-click).
+      renderPreview(previewCanvasWrap, []);
+      // Now that there's an image, reveal the edit trigger and the peek
+      // slider - both stayed hidden while the panel was blank.
+      openEditorBtn.hidden = false;
+      previewOpacityControls.hidden = false;
 
       ocrStatus.textContent = '正在辨識圖片中的文字與位置…';
       try {
@@ -302,18 +344,14 @@ imageInput.addEventListener('change', async () => {
           };
         });
 
-        // Mounts the live editing canvas immediately - the user can drag/
-        // resize/retype right away as a final positioning check, without
-        // waiting to click "產生 HTML" first (OCR bounding boxes are never
-        // pixel-perfect; this is the correction step for that).
-        mountEditor(detectedLines, imageDataUrl);
+        renderPreview(previewCanvasWrap, detectedLines);
 
         if (detectedLines.length) {
           ocrStatus.className = 'done';
-          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字，右邊可以直接拖曳調整位置/大小`;
+          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字，右邊可以預覽，按「編輯」調整位置/大小`;
         } else {
           ocrStatus.className = 'error';
-          ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來；右邊仍可以手動新增文字方塊）';
+          ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來；按「編輯」仍可以手動新增文字方塊）';
         }
       } catch (err) {
         if (thisUploadToken !== uploadToken) return;
