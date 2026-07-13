@@ -13,6 +13,10 @@
 
 * { box-sizing: border-box; }
 
+/* Suppresses the browser's own rubber-band/overscroll bounce so it doesn't
+   fight with the custom one in js/scroll-effects.js (double-bounce). */
+html, body { overscroll-behavior: none; }
+
 /* Bounce/dynamic feel matched to C:\Portfolio's global button interaction:
    press shrinks quickly on a snappy ease, release/hover springs back with an
    overshoot curve (cubic-bezier peak >1 = the "bounce"). */
@@ -352,3 +356,28 @@ textarea { resize: vertical; min-height: 44px; }
   background: #fff; color: #c0341d; cursor: pointer; font-size: 13px;
 }
 #deleteLineBtn:hover { background: #c0341d; color: #fff; }
+
+/* js/scroll-effects.js translates this wrapper on wheel/touch overscroll at
+   the page's top/bottom edge, then springs it back to 0 - see that file for
+   the drag physics. No transition is declared here: the script sets
+   `transition:none` while actively dragging (so the wrapper tracks the
+   pointer 1:1) and only turns the transition on for the release/snap-back,
+   so a CSS rule here would just be dead weight. */
+#pageBounceWrap { will-change: transform; }
+
+/* Scroll reveal: these section-level blocks fade out once they scroll out of
+   the viewport (top or bottom edge) and fade back in when scrolled back into
+   view - ported from C:\Portfolio's Framer Motion `whileInView(..., { once:
+   false })` card reveal, reimplemented in js/scroll-effects.js with a plain
+   IntersectionObserver since this project has no animation library. Default
+   state is visible (nothing here hides it up front) so a slow/failed script
+   load never leaves content invisible - only .scrollFaded, added once the
+   observer actually confirms an element left the viewport, fades it out.
+   #outputWrap is deliberately not included here - it already has its own
+   one-shot reveal animation (see @keyframes fadeSlideUp) triggered when it
+   un-hides after "產生 HTML", and layering a second opacity/transform
+   transition on top of that would fight it. */
+.headerRow, #uploadPanel, #editPanelWrap, .bottomRow {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.scrollFaded { opacity: 0; transform: translateY(16px); }

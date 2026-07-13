@@ -16,6 +16,8 @@
 </head>
 <body>
 
+<div id="pageBounceWrap">
+
 <div class="headerRow">
   <div>
     <h1>讓圖片文字可選：<span class="subtitle">令圖片上每個文字都被 WordPress 看見</span></h1>
@@ -27,11 +29,11 @@
       <div id="settingsPanel" class="popoverPanel" hidden>
         <div class="checkboxRow">
           <input type="radio" name="engineChoice" id="engine_paddle" value="paddle" checked />
-          <label for="engine_paddle" style="margin:0;">PaddleOCR（預設，免費離線；實測對照片背景/紋理誤判成文字的抵抗力比 Tesseract 好很多，詳見 <code>docs/plan-paddleocr-evaluation.md</code>）</label>
+          <label for="engine_paddle" style="margin:0;">PaddleOCR（預設）</label>
         </div>
         <div class="checkboxRow">
           <input type="radio" name="engineChoice" id="engine_tesseract" value="tesseract" />
-          <label for="engine_tesseract" style="margin:0;">Tesseract（免費離線，原本的引擎，留著當退路）</label>
+          <label for="engine_tesseract" style="margin:0;">Tesseract</label>
         </div>
         <div class="checkboxRow">
           <input type="radio" name="engineChoice" id="engine_vision" value="vision" />
@@ -39,7 +41,7 @@
         </div>
 
         <div id="paddleScriptPanel">
-          <label for="paddleScriptSelect">書寫系統（大部分情況不用改，PaddleOCR 預設模型已經涵蓋中日英文+拉丁語系）</label>
+          <label for="paddleScriptSelect">書寫系統</label>
           <select id="paddleScriptSelect"></select>
         </div>
 
@@ -120,6 +122,8 @@
   </div>
 </div>
 
+</div>
+
 <dialog id="editorDialog">
   <div class="editorToolbar">
     <strong>編輯疊字</strong>
@@ -151,6 +155,7 @@
 </dialog>
 
 <script type="module" src="js/main.js"></script>
+<script type="module" src="js/scroll-effects.js"></script>
 
 </body>
 </html>
