@@ -1,4 +1,192 @@
-import { PADDLE_DEFAULT_SCRIPT } from './languages.js';
+#!/usr/bin/env node
+// One-time structural refactor: splits js/main.js's settings-menu logic and
+// WordPress-output-preview logic out into their own modules, following this
+// project's own established pattern (one file per self-contained concern,
+// see CLAUDE.md "之後新增功能時...不要把新邏輯塞回 main.js 讓它重新肥大").
+// Also dedupes the ~6 lines of "clear previous results" UI-reset logic that
+// were duplicated between resetWorkspace() and the upload handler's start.
+//
+// This is a migration script, not a general-purpose tool - it writes fixed,
+// hand-verified file contents (not a mechanical AST transform), meant to be
+// read/reviewed once and run once. Safe to re-run (idempotent: it always
+// writes the same three files from scratch), but there's nothing to
+// "configure" - the new file contents are baked in below.
+//
+// Usage: node scripts/refactor-split-main.js
+
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.resolve(__dirname, '..');
+const JS_DIR = path.join(ROOT, 'js');
+
+const SETTINGS_MENU_JS = `import { LANGUAGES, PADDLE_SCRIPTS, PADDLE_DEFAULT_SCRIPT } from './languages.js';
+
+// Everything to do with the "調整辨識語言與引擎" settings popover: building
+// its dynamic option lists, opening/closing it, remembering the user's
+// Vision API key, and exposing getters for whatever main.js's upload flow
+// needs to read out of it. Self-initializes on import, same as every other
+// module here - no explicit init() call needed.
+const apiKeyInput = document.getElementById('apiKeyInput');
+const rememberKey = document.getElementById('rememberKey');
+const languageList = document.getElementById('languageList');
+const languageListPanel = document.getElementById('languageListPanel');
+const visionKeyPanel = document.getElementById('visionKeyPanel');
+const paddleScriptPanel = document.getElementById('paddleScriptPanel');
+const paddleScriptSelect = document.getElementById('paddleScriptSelect');
+const engineRadios = document.getElementsByName('engineChoice');
+const settingsToggleBtn = document.getElementById('settingsToggleBtn');
+const settingsPanel = document.getElementById('settingsPanel');
+
+for (const lang of LANGUAGES) {
+  const row = document.createElement('div');
+  row.className = 'checkboxRow';
+  const id = 'lang_' + lang.tesseract;
+  row.innerHTML = \`<input type="checkbox" id="\${id}" \${lang.defaultOn ? 'checked' : ''} /><label for="\${id}" style="margin:0;">\${lang.label}</label>\`;
+  languageList.appendChild(row);
+}
+
+for (const script of PADDLE_SCRIPTS) {
+  const opt = document.createElement('option');
+  opt.value = script.key;
+  opt.textContent = script.label;
+  paddleScriptSelect.appendChild(opt);
+}
+paddleScriptSelect.value = PADDLE_DEFAULT_SCRIPT;
+
+export function getSelectedLanguages() {
+  return LANGUAGES.filter((lang) => document.getElementById('lang_' + lang.tesseract).checked);
+}
+
+export function getSelectedEngine() {
+  for (const radio of engineRadios) if (radio.checked) return radio.value;
+  return 'paddle';
+}
+
+export function getPaddleScriptKey() {
+  return paddleScriptSelect.value;
+}
+
+export function getApiKey() {
+  return apiKeyInput.value.trim();
+}
+
+function updateEnginePanels() {
+  const engine = getSelectedEngine();
+  paddleScriptPanel.style.display = engine === 'paddle' ? 'block' : 'none';
+  languageListPanel.style.display = engine === 'paddle' ? 'none' : 'block';
+  visionKeyPanel.style.display = engine === 'vision' ? 'block' : 'none';
+}
+for (const radio of engineRadios) radio.addEventListener('change', updateEnginePanels);
+updateEnginePanels();
+
+// Settings menu is closed by default and opens as a floating panel overlaid
+// on top of the page (not an in-flow <details> that pushes content down) -
+// closes on outside click or Esc.
+function closeSettingsPanel() {
+  settingsPanel.hidden = true;
+  settingsToggleBtn.setAttribute('aria-expanded', 'false');
+}
+settingsToggleBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const willOpen = settingsPanel.hidden;
+  settingsPanel.hidden = !willOpen;
+  settingsToggleBtn.setAttribute('aria-expanded', String(willOpen));
+});
+document.addEventListener('click', (e) => {
+  if (settingsPanel.hidden) return;
+  if (settingsPanel.contains(e.target) || e.target === settingsToggleBtn) return;
+  closeSettingsPanel();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !settingsPanel.hidden) closeSettingsPanel();
+});
+
+// Restore a remembered key (only ever written to *this browser's* local
+// storage by the checkbox below - never embedded in the shared HTML file
+// or sent anywhere except directly to Google's API from this page).
+const savedKey = localStorage.getItem('wpOverlayGen_visionApiKey');
+if (savedKey) {
+  apiKeyInput.value = savedKey;
+  rememberKey.checked = true;
+  document.getElementById('engine_vision').checked = true;
+  updateEnginePanels();
+}
+rememberKey.addEventListener('change', () => {
+  if (rememberKey.checked && apiKeyInput.value.trim()) {
+    localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
+  } else {
+    localStorage.removeItem('wpOverlayGen_visionApiKey');
+  }
+});
+apiKeyInput.addEventListener('input', () => {
+  if (rememberKey.checked) localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
+});
+`;
+
+const WP_PREVIEW_JS = `import { buildFinalHtml } from './html-builder.js';
+
+// Everything to do with the "產生 HTML" output block: building the final
+// HTML string, writing it into the textarea, and rendering it inside an
+// isolated iframe (the *actual* generated string, not the app's own live
+// overlay state - catches buildFinalHtml() bugs the live preview wouldn't)
+// plus that iframe's two peek-opacity sliders.
+const outputWrap = document.getElementById('outputWrap');
+const htmlOutput = document.getElementById('htmlOutput');
+const wpPreviewFrame = document.getElementById('wpPreviewFrame');
+const previewBgOpacity = document.getElementById('previewBgOpacity');
+const previewOverlayOpacity = document.getElementById('previewOverlayOpacity');
+
+export function generateAndPreview({ imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight }) {
+  if (!altText || !imageDataUrl) return;
+
+  const html = buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight);
+  htmlOutput.value = html;
+  outputWrap.hidden = false;
+
+  // Renders the *actual* generated HTML string in an isolated document
+  // (srcdoc), not the app's own live overlay state - this is what WordPress
+  // would really produce from pasting that HTML, catching any bugs in
+  // buildFinalHtml() itself (e.g. escaping) that the live preview wouldn't.
+  wpPreviewFrame.srcdoc = \`<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;}</style></head><body>\${html}</body></html>\`;
+}
+
+// The two preview-only opacity sliders operate directly on the iframe's
+// rendered DOM, not on htmlOutput/detectedLines - each srcdoc write creates
+// a brand new document, so the base-opacity cache below must be re-attached
+// on every 'load', which also resets the sliders to 100% as required
+// ("重新按產生 HTML 時拉桿重置回 100%").
+wpPreviewFrame.addEventListener('load', () => {
+  const doc = wpPreviewFrame.contentDocument;
+  if (!doc) return;
+
+  previewBgOpacity.value = 100;
+  previewOverlayOpacity.value = 100;
+  doc.querySelectorAll('.ovText').forEach((el) => {
+    el.dataset.baseOpacity = el.style.opacity || '1';
+  });
+});
+
+previewBgOpacity.addEventListener('input', () => {
+  const doc = wpPreviewFrame.contentDocument;
+  const img = doc && doc.querySelector('img');
+  if (img) img.style.opacity = String(Number(previewBgOpacity.value) / 100);
+});
+
+previewOverlayOpacity.addEventListener('input', () => {
+  const doc = wpPreviewFrame.contentDocument;
+  if (!doc) return;
+  // Scales each line's own saved opacity by the slider fraction rather than
+  // overwriting it outright, so per-block opacity differences (set in the
+  // editor) stay visible while "peeking" through the overlay.
+  const factor = Number(previewOverlayOpacity.value) / 100;
+  doc.querySelectorAll('.ovText').forEach((el) => {
+    el.style.opacity = String(Number(el.dataset.baseOpacity ?? '1') * factor);
+  });
+});
+`;
+
+const MAIN_JS = `import { PADDLE_DEFAULT_SCRIPT } from './languages.js';
 import { extractTextColor } from './color.js';
 import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
@@ -243,7 +431,7 @@ imageInput.addEventListener('change', async () => {
           } catch (cloudErr) {
             // Fall back to PaddleOCR (the default engine) rather than
             // dead-ending the whole flow on a bad/expired key or network hiccup.
-            ocrStatus.textContent = `Google Cloud Vision 辨識失敗（${cloudErr.message}），改用 PaddleOCR…`;
+            ocrStatus.textContent = \`Google Cloud Vision 辨識失敗（\${cloudErr.message}），改用 PaddleOCR…\`;
             rawLines = await recognizeWithPaddleOCR(ocrInputDataUrl, PADDLE_DEFAULT_SCRIPT);
           }
         } else if (engine === 'tesseract') {
@@ -251,7 +439,7 @@ imageInput.addEventListener('change', async () => {
           // languages means a smaller model download and less ambiguity
           // between similarly-shaped characters across scripts.
           rawLines = await recognizeWithTesseract(ocrInputDataUrl, tesseractLangString, (progress) => {
-            ocrStatus.textContent = `正在辨識圖片中的文字與位置…${Math.round(progress * 100)}%`;
+            ocrStatus.textContent = \`正在辨識圖片中的文字與位置…\${Math.round(progress * 100)}%\`;
           });
         } else {
           ocrStatus.textContent = '正在用 PaddleOCR 辨識圖片中的文字與位置（第一次使用需要下載模型，可能需要幾秒到十幾秒）…';
@@ -263,7 +451,7 @@ imageInput.addEventListener('change', async () => {
         // Box coordinates came back in the upscaled image's pixel space -
         // scale them back down to natural-image pixels before anything
         // downstream (percentage-of-natural-size math, color sampling
-        // against the natural-size `ctx` canvas below) touches them.
+        // against the natural-size \`ctx\` canvas below) touches them.
         if (ocrScale !== 1) {
           rawLines = rawLines.map((l) => ({ ...l, x0: l.x0 / ocrScale, y0: l.y0 / ocrScale, x1: l.x1 / ocrScale, y1: l.y1 / ocrScale }));
         }
@@ -288,7 +476,7 @@ imageInput.addEventListener('change', async () => {
             shadow,
             // null unless extractTextColor() detected a real horizontal
             // color shift across the line (js/color.js) - rendering paths
-            // fall back to the flat `color` above whenever this is null.
+            // fall back to the flat \`color\` above whenever this is null.
             gradient,
             opacity: 1,
             letterSpacing: 0,
@@ -331,7 +519,7 @@ imageInput.addEventListener('change', async () => {
 
         if (detectedLines.length) {
           ocrStatus.className = 'done';
-          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字，右邊可以預覽，按「編輯」調整位置/大小`;
+          ocrStatus.textContent = \`辨識完成，偵測到 \${detectedLines.length} 行文字，右邊可以預覽，按「編輯」調整位置/大小\`;
         } else {
           ocrStatus.className = 'error';
           ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來；按「編輯」仍可以手動新增文字方塊）';
@@ -368,3 +556,16 @@ copyBtn.addEventListener('click', async () => {
     setTimeout(() => { copiedMsg.style.display = 'none'; }, 4000);
   }
 });
+`;
+
+function write(relPath, content) {
+  const full = path.join(ROOT, relPath);
+  fs.writeFileSync(full, content, 'utf8');
+  console.log(`  wrote ${relPath} (${content.split('\n').length} lines)`);
+}
+
+console.log('Splitting js/main.js into main.js + settings-menu.js + wp-preview.js...\n');
+write('js/settings-menu.js', SETTINGS_MENU_JS);
+write('js/wp-preview.js', WP_PREVIEW_JS);
+write('js/main.js', MAIN_JS);
+console.log('\nDone. Run `node scripts/precheck.js` next, then verify in the browser.');

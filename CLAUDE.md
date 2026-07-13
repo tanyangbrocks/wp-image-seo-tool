@@ -60,14 +60,20 @@ wp-image-seo-tool/
     ocr-paddle.js           recognizeWithPaddleOCR／preloadDefaultModel（預設引擎，CDN 動態 import）
     text-fit.js              fitTextToBox（字級＋字距聯合擬合）／OVERLAY_FONT_STACK
     line-merge.js             mergeCloseLines（相近 OCR 行合併成多列文字方塊）
-    html-builder.js            escapeHtml／buildFinalHtml
-    preview.js                  renderPreview（右欄唯讀疊字預覽）
-    editor.js                    mountEditor（`<dialog>` 內的可互動編輯畫布，PPT 式方塊互動）
-    scroll-effects.js             區塊淡入淡出／頂底端橡皮筋回彈（純 JS/CSS，無函式庫）
-    main.js                       DOM 綁定、事件、狀態（imageDataUrl/detectedLines 等）、把上面模組串起來
+    image-prep.js              prepareImageForOcr（小圖放大再辨識，座標事後縮回原圖空間）
+    html-builder.js             escapeHtml／buildFinalHtml
+    preview.js                   renderPreview（右欄唯讀疊字預覽）
+    editor.js                     mountEditor（`<dialog>` 內的可互動編輯畫布，PPT 式方塊互動）
+    scroll-effects.js              區塊淡入淡出／頂底端橡皮筋回彈（純 JS/CSS，無函式庫）
+    settings-menu.js                「調整辨識語言與引擎」彈出選單全部邏輯，匯出 getSelectedLanguages／getSelectedEngine／getPaddleScriptKey／getApiKey 給 main.js 讀
+    wp-preview.js                    generateAndPreview（「產生 HTML」輸出區塊 + WordPress 渲染預覽 iframe + 兩條 peek-opacity 拉桿）
+    main.js                           DOM 綁定、事件、狀態（imageDataUrl/detectedLines 等）、把上面模組串起來——**只做這件事**，settings-menu.js／wp-preview.js 2026-07-14 從這裡拆出去就是因為這條規則被違反了一次（見下方警語）
   scripts/precheck.js  純 Node 內建模組的專案級靜態檢查（DOM id／import-export／HTML 標籤／CSS 死選擇器／PowerShell 語法／Markdown 連結，每次改完都要跑）
+  scripts/refactor-split-main.js  一次性遷移腳本（已跑過，留著當「這次怎麼拆的」的紀錄，不需要再跑）
   docs/manual-review-checklist.md  precheck.js 抓不到、但純讀程式碼推理找得到的 bug 類型清單（race condition／錯誤處理／夾限/鍵盤可及性等），改完重大功能後過一輪
 ```
+
+🔴 **main.js 曾經違反過自己訂的規則**：main.js 一度長到 485 行，混進了設定選單邏輯跟 WordPress 輸出預覽邏輯（兩個跟「上傳→OCR→編輯」這條主線無關的獨立功能），2026-07-14 拆成 `settings-menu.js`／`wp-preview.js` 兩個檔案後main.js 降到 371 行。**之後任何新功能，動手前先問「這是主線流程的一部分，還是一個可以獨立描述的子功能」**——是後者就開新檔案，不要因為「反正 main.js 已經 import 一堆東西了」就順手加進去。
 
 `Tesseract` 物件是 CDN `<script>`（非 module）掛在 `window` 上的全域變數，`ocr-tesseract.js` 直接引用它，不用額外 import。
 
