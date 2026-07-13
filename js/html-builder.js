@@ -32,7 +32,11 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
     // added lines get a default rectangle and, like OCR-sourced ones, can be
     // resized with the editor's corner handles (see js/editor.js).
     const opacity = line.opacity ?? 1;
-    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: nowrap; overflow: hidden; display: flex; align-items: center; font-weight: 700; line-height: 1.05; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; color: ${line.color}; text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
+    // white-space: pre-line (not nowrap) so a merged multi-line box's "\n"s
+    // (see js/line-merge.js) render as real line breaks instead of one long
+    // clipped line; a plain single-line box with no "\n" renders exactly the
+    // same either way as long as it fits its box.
+    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre-line; overflow: hidden; display: flex; align-items: center; font-weight: 700; line-height: ${line.lineHeight ?? 1.05}; letter-spacing: ${line.letterSpacing ?? 0}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; color: ${line.color}; text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
   }).join('\n');
 
   // width/height attributes (the image's real intrinsic pixel size, distinct
@@ -51,6 +55,17 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
   // relying on an unstructured wrapper. The figcaption repeats the alt text
   // visibly (captions are a stronger ranking signal for image search than
   // alt text alone) rather than only living in a non-visible attribute.
+  //
+  // The img+overlay divs are wrapped in an inner positioned <div>, separate
+  // from <figcaption>, rather than making <figure> itself the positioned
+  // container: percentage top/height on an absolutely positioned element
+  // resolve against its containing block's height, and <figcaption> is
+  // in-flow content that would otherwise inflate <figure>'s height beyond
+  // the image's own rendered height - every line's top/height would then be
+  // computed against that taller (wrong) number and land too low. Confirmed
+  // via a synthetic test image: figure.clientHeight (526px) vs
+  // img.clientHeight (501px) with the old single-container structure, a
+  // systematic vertical offset that grew with each line's topPct.
   return `<!--
   SEO 提醒：<img> 的 src 目前是 base64 內嵌圖片（data:image/...），
   Google 圖片搜尋等引擎無法索引 base64 圖片，也無法被加進圖片 sitemap。
@@ -58,9 +73,11 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
   src 換成媒體庫給的真實網址（例如 https://你的網域/wp-content/uploads/...），
   下面的 JSON-LD contentUrl 也一併換成同一個網址，才能真正被圖片搜尋索引。
 -->
-<figure style="position: relative; width: 100%; container-type: inline-size; border-radius: 10px; overflow: hidden; margin: 0;">
-  <img src="${imageDataUrl}" alt="${escapedAlt}"${sizeAttrs} loading="lazy" decoding="async" style="display: block; width: 100%; height: auto;" />
+<figure style="margin: 0;">
+  <div style="position: relative; width: 100%; container-type: inline-size; border-radius: 10px; overflow: hidden;">
+    <img src="${imageDataUrl}" alt="${escapedAlt}"${sizeAttrs} loading="lazy" decoding="async" style="display: block; width: 100%; height: auto;" />
 ${lineDivs}
+  </div>
   <figcaption style="margin-top: 8px; font-size: 13px; color: #666; text-align: center;">${escapedAlt}</figcaption>
 </figure>
 <script type="application/ld+json">${buildImageObjectJsonLd(imageDataUrl, altText)}</script>`;

@@ -18,8 +18,7 @@
 
 <div class="headerRow">
   <div>
-    <h1>讓圖片文字可選</h1>
-    <p class="subtitle">令圖片上每個文字都被 WordPress 看見</p>
+    <h1>讓圖片文字可選：<span class="subtitle">令圖片上每個文字都被 WordPress 看見</span></h1>
   </div>
   <div class="headerRight">
     <span class="credit">Created by 彈羊如柳丁 <img src="assets/icon/orange-sheep.png" alt="" class="creditLogo" /></span>
@@ -80,9 +79,11 @@
 
   <div class="panel" id="editPanelWrap">
     <label class="sectionTitle">圖片預覽</label>
-    <div id="previewCanvasWrap">
-      <img id="previewCanvasImg" alt="" />
-      <button type="button" id="openEditorBtn" title="開啟編輯視窗" aria-label="開啟編輯視窗" hidden>✎ 編輯</button>
+    <div id="previewCanvasOuter">
+      <div id="previewCanvasWrap">
+        <img id="previewCanvasImg" alt="" />
+        <button type="button" id="openEditorBtn" title="開啟編輯視窗" aria-label="開啟編輯視窗" hidden>✎ 編輯</button>
+      </div>
     </div>
     <div class="opacityControls" id="previewOpacityControls" hidden>
       <label>底圖不透明度 <input type="range" id="previewCanvasBgOpacity" min="0" max="100" value="100" /></label>
@@ -140,6 +141,10 @@
       <input type="color" id="panelColor" />
       <label for="panelOpacity">不透明度</label>
       <input type="range" id="panelOpacity" min="0" max="100" />
+      <label for="panelLetterSpacing">字距</label>
+      <input type="range" id="panelLetterSpacing" min="-0.05" max="0.5" step="0.01" />
+      <label for="panelLineHeight">行距</label>
+      <input type="range" id="panelLineHeight" min="0.8" max="2.5" step="0.05" />
       <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
     </div>
   </div>

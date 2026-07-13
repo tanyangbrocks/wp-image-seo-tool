@@ -3,6 +3,7 @@ import { extractTextColor } from './color.js';
 import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
+import { mergeCloseLines } from './line-merge.js';
 import { buildFinalHtml } from './html-builder.js';
 import { renderPreview } from './preview.js';
 import { mountEditor } from './editor.js';
@@ -340,9 +341,17 @@ imageInput.addEventListener('change', async () => {
             fontSizeCqw: ((y1 - y0) / naturalWidth) * 100 * 0.85,
             color,
             shadow,
-            opacity: 1
+            opacity: 1,
+            letterSpacing: 0,
+            lineHeight: 1.05
           };
         });
+        // OCR returns one bounding box per detected text LINE, not per
+        // paragraph - consecutive lines that are only a small gap apart
+        // (and horizontally aligned) are very likely the same multi-line
+        // text block in the source image, so merge them into one editable
+        // box instead of leaving them as separate stacked boxes.
+        detectedLines = mergeCloseLines(detectedLines, naturalWidth, naturalHeight);
 
         renderPreview(previewCanvasWrap, detectedLines);
 

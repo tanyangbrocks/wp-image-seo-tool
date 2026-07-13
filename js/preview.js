@@ -17,6 +17,8 @@ export function renderPreview(wrap, detectedLines) {
     el.style.color = line.color;
     el.style.textShadow = line.shadow;
     el.style.opacity = String(line.opacity ?? 1);
+    el.style.letterSpacing = (line.letterSpacing ?? 0) + 'em';
+    el.style.lineHeight = String(line.lineHeight ?? 1.05);
     wrap.appendChild(el);
   }
 }

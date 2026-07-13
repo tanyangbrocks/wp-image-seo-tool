@@ -6,6 +6,8 @@ const editorPanel = document.getElementById('editorPanel');
 const panelFontSize = document.getElementById('panelFontSize');
 const panelColor = document.getElementById('panelColor');
 const panelOpacity = document.getElementById('panelOpacity');
+const panelLetterSpacing = document.getElementById('panelLetterSpacing');
+const panelLineHeight = document.getElementById('panelLineHeight');
 const deleteLineBtn = document.getElementById('deleteLineBtn');
 const addLineBtn = document.getElementById('addLineBtn');
 const allTransparentToggle = document.getElementById('allTransparentToggle');
@@ -40,6 +42,18 @@ function renderCanvas() {
     textEl.style.color = line.color;
     textEl.style.textShadow = line.shadow;
     textEl.style.opacity = String(line.opacity ?? 1);
+    textEl.style.letterSpacing = (line.letterSpacing ?? 0) + 'em';
+    textEl.style.lineHeight = String(line.lineHeight ?? 1.05);
+    // contenteditable inserts literal newlines as <br> or new <div>s rather
+    // than reflecting back into textContent as "\n" characters the way a
+    // <textarea> would - white-space:pre-line (see CSS) still displays a
+    // merged multi-line box's existing "\n"s correctly, this just keeps
+    // manual Enter-key edits inside a box from producing DOM the .textContent
+    // readback below wouldn't round-trip cleanly (contenteditable + pre-line
+    // is an intentionally text-only editing surface, not a rich editor).
+    textEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
     // Keeps detectedLines in sync with the contenteditable box as the user
     // types. textEl is never toggled non-editable and never intercepted by
     // drag logic (drag only starts from the separate .ovMoveHandle/
@@ -87,6 +101,8 @@ function selectLine(index) {
   panelFontSize.value = line.fontSizeCqw;
   panelColor.value = rgbToHex(line.color);
   panelOpacity.value = Math.round((line.opacity ?? 1) * 100);
+  panelLetterSpacing.value = line.letterSpacing ?? 0;
+  panelLineHeight.value = line.lineHeight ?? 1.05;
   editorPanel.style.display = 'block';
 }
 
@@ -149,6 +165,8 @@ function updateSelectedBoxStyle() {
   textEl.style.fontSize = line.fontSizeCqw + 'cqw';
   textEl.style.color = line.color;
   textEl.style.opacity = String(line.opacity ?? 1);
+  textEl.style.letterSpacing = (line.letterSpacing ?? 0) + 'em';
+  textEl.style.lineHeight = String(line.lineHeight ?? 1.05);
 }
 
 // Move/resize both start only from their dedicated handle elements (never
@@ -296,6 +314,16 @@ panelOpacity.addEventListener('input', () => {
   detectedLines[selectedIndex].opacity = Number(panelOpacity.value) / 100;
   updateSelectedBoxStyle();
 });
+panelLetterSpacing.addEventListener('input', () => {
+  if (selectedIndex == null) return;
+  detectedLines[selectedIndex].letterSpacing = Number(panelLetterSpacing.value);
+  updateSelectedBoxStyle();
+});
+panelLineHeight.addEventListener('input', () => {
+  if (selectedIndex == null) return;
+  detectedLines[selectedIndex].lineHeight = Number(panelLineHeight.value);
+  updateSelectedBoxStyle();
+});
 deleteLineBtn.addEventListener('click', () => {
   if (selectedIndex == null) return;
   deleteLine(selectedIndex);
@@ -315,7 +343,9 @@ addLineBtn.addEventListener('click', () => {
     fontSizeCqw: 4,
     color: 'rgb(255, 255, 255)',
     shadow: '0 1px 3px rgba(0,0,0,0.55)',
-    opacity: 1
+    opacity: 1,
+    letterSpacing: 0,
+    lineHeight: 1.05
   });
   const index = detectedLines.length - 1;
   renderCanvas();

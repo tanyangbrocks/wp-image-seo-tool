@@ -36,7 +36,10 @@ body {
 }
 .headerRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 h1 { font-size: 24px; margin: 0; color: var(--highlight); }
-.subtitle { margin: 4px 0 0; font-size: 14px; color: var(--foreground); opacity: 0.7; }
+/* Title and subtitle merged onto a single line (a <span> inside <h1>,
+   not a separate <p>) - kept visually distinct via lighter weight/size/
+   opacity and the plain foreground color instead of the highlight color. */
+.subtitle { font-size: 15px; font-weight: 400; color: var(--foreground); opacity: 0.7; }
 /* Credit line + settings button share this column so they land centered on
    the same axis, "nudging" the credit line in from the far edge to align
    with the button underneath it rather than the two looking unrelated. */
@@ -138,25 +141,42 @@ textarea { resize: vertical; min-height: 44px; }
 
 /* Read-only preview - shown immediately after OCR, but not directly
    editable (see js/preview.js). Editing only happens in #editorDialog,
-   opened via #openEditorBtn or double-clicking this area. */
-#previewCanvasWrap {
-  position: relative;
+   opened via #openEditorBtn or double-clicking this area.
+
+   Split into two nested elements on purpose: #previewCanvasOuter is what
+   flexes/stretches to fill leftover column height (from .mainGrid's
+   align-items:stretch matching the left column), while #previewCanvasWrap -
+   the actual positioned containing block .previewLine's percentages resolve
+   against - stays sized to exactly the image's own rendered box (a plain
+   block wrapping an auto-height img, never flex-stretched). If the wrap
+   itself were the flexed element, it could end up taller than the image
+   (extra vertical space in a short/wide image), and every line's top%/
+   height% would then be computed against that too-tall number instead of
+   the image's real height - a confirmed real bug (synthetic test showed the
+   wrap growing to 321px while the image only rendered to 238px, ~34px of
+   systematic vertical drift on a line at topPct 41%). */
+#previewCanvasOuter {
   flex: 1;
   min-height: 220px;
-  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--border);
   background: #fafafa;
 }
+#previewCanvasWrap { position: relative; width: 100%; container-type: inline-size; }
 #previewCanvasImg { display: block; width: 100%; height: auto; }
 .previewLine {
   position: absolute;
   display: flex;
   align-items: center;
   font-weight: 700;
-  line-height: 1.05;
-  white-space: nowrap;
+  /* line-height/letter-spacing/white-space are set inline per-line by
+     js/preview.js (defaults 1.05/0/pre-line) - pre-line so a merged
+     multi-line box's "\n"s (js/line-merge.js) render as real breaks. */
+  white-space: pre-line;
   overflow: hidden;
   pointer-events: none;
 }
@@ -258,8 +278,10 @@ textarea { resize: vertical; min-height: 44px; }
 .ovBoxText {
   width: 100%; height: 100%;
   font-weight: 700;
-  line-height: 1.05;
-  white-space: nowrap;
+  /* line-height/letter-spacing/white-space are set inline per-line by
+     js/editor.js (defaults 1.05/0/pre-line) - pre-line so a merged
+     multi-line box's "\n"s (js/line-merge.js) render as real breaks. */
+  white-space: pre-line;
   overflow: hidden;
   outline: none;
   cursor: text;
