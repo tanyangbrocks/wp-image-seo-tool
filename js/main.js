@@ -12,6 +12,7 @@ import { mountEditor } from './editor.js';
 const landingSection = document.getElementById('landingSection');
 const workspaceSection = document.getElementById('workspaceSection');
 const landingChooseBtn = document.getElementById('landingChooseBtn');
+const chooseImageBtn = document.getElementById('chooseImageBtn');
 const backBtn = document.getElementById('backBtn');
 const backConfirmDialog = document.getElementById('backConfirmDialog');
 const backConfirmYes = document.getElementById('backConfirmYes');
@@ -152,6 +153,9 @@ let uploadToken = 0;
 // input rather than being a second one - it lives inside #workspaceSection
 // (index.html), unchanged since before the landing screen existed.
 landingChooseBtn.addEventListener('click', () => imageInput.click());
+// #chooseImageBtn replaces the native file-picker button (hidden, see
+// index.html) with a styled trigger matching #landingChooseBtn's look.
+chooseImageBtn.addEventListener('click', () => imageInput.click());
 
 // "← 上一步" - confirms before discarding whatever's currently loaded/being
 // processed and scrolling back to the landing screen. Bumping uploadToken

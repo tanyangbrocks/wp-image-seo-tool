@@ -8,8 +8,9 @@
 // newly-merged line extends `prev`'s box in place, so a third, fourth, etc.
 // line compares its gap against the already-extended box, not just the
 // original first line - a single text box can end up with many rows.
-const VERTICAL_GAP_RATIO = 0.5; // gap must be under 50% of the average line height to merge
+const VERTICAL_GAP_RATIO = 0.5; // gap must be under 50% of the *smaller* line's height to merge
 const MIN_HORIZONTAL_OVERLAP = 0.4; // and the two lines' horizontal spans must overlap at least this much
+const MIN_HEIGHT_RATIO = 0.7; // smaller/larger line height must be at least this (i.e. within roughly 0.7x-1.4x of each other) to count as "same font size"
 
 function overlapRatio(a0, a1, b0, b1) {
   const overlap = Math.min(a1, b1) - Math.max(a0, b0);
@@ -33,10 +34,28 @@ export function mergeCloseLines(lines) {
   for (const line of sorted) {
     const prev = merged[merged.length - 1];
     if (prev) {
+      // Compare against the *individual* height of the line most recently
+      // folded into prev (_lastHeightPct), not prev.heightPct itself - once
+      // prev has absorbed 2+ lines, prev.heightPct is the whole merged
+      // block's span (e.g. ~2x a single line's height for a 2-row block),
+      // which no longer represents "this block's font size". Comparing a
+      // legitimately-continuing 3rd row against that inflated span would
+      // wrongly fail the font-size check below and break multi-row merging.
+      const prevLineHeight = prev._lastHeightPct ?? prev.heightPct;
       const gap = line.topPct - (prev.topPct + prev.heightPct);
-      const avgHeight = (prev.heightPct + line.heightPct) / 2;
+      const minHeight = Math.min(prevLineHeight, line.heightPct);
+      const maxHeight = Math.max(prevLineHeight, line.heightPct);
       const hOverlap = overlapRatio(prev.leftPct, prev.leftPct + prev.widthPct, line.leftPct, line.leftPct + line.widthPct);
-      if (gap < avgHeight * VERTICAL_GAP_RATIO && hOverlap >= MIN_HORIZONTAL_OVERLAP) {
+      // Font-size gate: two lines from genuinely different design elements
+      // (e.g. a large headline sitting close above a small subtitle) can
+      // have a tiny gap relative to *their average* height simply because
+      // averaging with a much taller line inflates the tolerance - using
+      // the smaller line's own height as the gap basis, plus an explicit
+      // check that the two heights are actually close to each other, is
+      // what keeps differently-sized text from merging just because it's
+      // physically near a bigger block.
+      const sameFontSize = minHeight / maxHeight >= MIN_HEIGHT_RATIO;
+      if (sameFontSize && gap < minHeight * VERTICAL_GAP_RATIO && hOverlap >= MIN_HORIZONTAL_OVERLAP) {
         const newLeft = Math.min(prev.leftPct, line.leftPct);
         const newRight = Math.max(prev.leftPct + prev.widthPct, line.leftPct + line.widthPct);
         const newBottom = line.topPct + line.heightPct;
@@ -44,6 +63,7 @@ export function mergeCloseLines(lines) {
         prev.leftPct = newLeft;
         prev.widthPct = newRight - newLeft;
         prev.heightPct = newBottom - prev.topPct;
+        prev._lastHeightPct = line.heightPct;
         prev.lineCount = (prev.lineCount || 1) + 1;
         continue;
       }
@@ -51,5 +71,8 @@ export function mergeCloseLines(lines) {
     merged.push({ ...line, lineCount: 1 });
   }
 
-  return merged;
+  return merged.map((line) => {
+    delete line._lastHeightPct;
+    return line;
+  });
 }

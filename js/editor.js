@@ -1,5 +1,6 @@
 import { rgbToHex, hexToRgb, applyTextFillStyle } from './color.js';
 
+const editorDialog = document.getElementById('editorDialog');
 const editorImg = document.getElementById('editorImg');
 const editorCanvasWrap = document.getElementById('editorCanvasWrap');
 const editorPanel = document.getElementById('editorPanel');
@@ -8,17 +9,22 @@ const panelColor = document.getElementById('panelColor');
 const panelOpacity = document.getElementById('panelOpacity');
 const panelLetterSpacing = document.getElementById('panelLetterSpacing');
 const panelLineHeight = document.getElementById('panelLineHeight');
-const deleteLineBtn = document.getElementById('deleteLineBtn');
 const addLineBtn = document.getElementById('addLineBtn');
+const cancelEditorBtn = document.getElementById('cancelEditorBtn');
 const allTransparentToggle = document.getElementById('allTransparentToggle');
 const editorBgOpacity = document.getElementById('editorBgOpacity');
 
-// Edits here are immediate and permanent - this module operates directly on
-// the same array reference main.js owns (mutated in place with push/splice/
-// property assignment, never reassigned), so there's no separate "save" step
-// and nothing to reconcile back. main.js just reads this array's current
-// contents whenever it builds the output HTML.
+// Edits here are immediate - this module operates directly on the same
+// array reference main.js owns (mutated in place with push/splice/property
+// assignment, never reassigned), so there's no separate "save" step and
+// nothing to reconcile back on "完成". `snapshot` exists solely so "取消"
+// has something to roll back to: a shallow per-line copy taken when the
+// dialog opens (mountEditor()) - shallow is enough since no line field is
+// ever mutated in place (color/gradient/etc. are always reassigned wholesale,
+// never pushed/spliced into), so copying just the top-level object per line
+// is a real, independent snapshot.
 let detectedLines = [];
+let snapshot = [];
 let selectedIndex = null;
 let dragState = null;
 
@@ -56,31 +62,39 @@ function renderCanvas() {
     });
     // Keeps detectedLines in sync with the contenteditable box as the user
     // types. textEl is never toggled non-editable and never intercepted by
-    // drag logic (drag only starts from the separate .ovMoveHandle/
+    // drag logic (drag only starts from the separate .ovBoxFrame/
     // .ovResizeHandle elements below) - clicking text always just edits it.
     textEl.addEventListener('input', () => {
       line.text = textEl.textContent;
     });
     textEl.addEventListener('focus', () => selectLine(index));
 
-    const moveHandle = document.createElement('button');
-    moveHandle.type = 'button';
-    moveHandle.className = 'ovMoveHandle';
-    moveHandle.title = '拖曳移動位置（取得焦點後也可以用方向鍵微調，Shift+方向鍵幅度較大）';
-    moveHandle.setAttribute('aria-label', '拖曳移動位置');
-    moveHandle.textContent = '✛';
-
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'ovDeleteBtn';
-    delBtn.title = '刪除這個文字方塊';
-    delBtn.setAttribute('aria-label', '刪除這個文字方塊');
-    delBtn.textContent = '×';
+    // The frame is a ring just outside the text's own edges (see CSS
+    // `.ovBoxFrame { inset: -5px; }`) - text is never inset/shrunk to make
+    // room for it, so the export-facing box geometry (and its rendered
+    // text) stays pixel-identical to the unselected state. Only in that
+    // outer ring does the frame have anything to catch: everywhere the
+    // text itself covers, the text (higher z-index, see CSS) wins hit-
+    // testing, so clicking text always still just edits it directly - the
+    // frame never intercepts a text click. Clicking/dragging the frame
+    // itself always means "select and/or move the whole box", never
+    // "start typing", so unlike the text, it's safe to always treat its
+    // pointerdown as a potential drag with no click-vs-drag ambiguity to
+    // guard against (see pointerdown handler below).
+    const frame = document.createElement('div');
+    frame.className = 'ovBoxFrame';
+    frame.tabIndex = 0;
+    frame.setAttribute('role', 'button');
+    frame.setAttribute('aria-label', '文字方塊，拖曳移動位置，方向鍵微調（Shift+方向鍵幅度較大），Delete 鍵刪除');
+    // Tabbing to the frame (without ever clicking) should behave the same as
+    // clicking it - side panel populated, box marked selected - otherwise a
+    // keyboard-only user who reaches a box via Tab has no way to see/adjust
+    // its font/color/opacity panel, only move/delete it.
+    frame.addEventListener('focus', () => selectLine(index));
 
     box.appendChild(textEl);
-    box.appendChild(moveHandle);
-    box.appendChild(delBtn);
-    for (const corner of ['nw', 'ne', 'sw', 'se']) {
+    box.appendChild(frame);
+    for (const corner of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) {
       const handle = document.createElement('div');
       handle.className = 'ovResizeHandle ' + corner;
       handle.dataset.corner = corner;
@@ -113,21 +127,23 @@ function hidePanel() {
 
 function deleteLine(index) {
   detectedLines.splice(index, 1);
-  // The inline "×" badge can delete a box other than the currently selected
-  // one - shift selectedIndex to keep pointing at the same underlying line
-  // rather than whatever now occupies its old array slot.
+  // Deletion is keyed off whichever box's frame currently has keyboard
+  // focus (see the Delete/Backspace keydown handler below), which isn't
+  // necessarily selectedIndex (a user can Tab to a box without ever
+  // clicking/selecting it first) - shift selectedIndex to keep pointing at
+  // the same underlying line rather than whatever now occupies its old
+  // array slot.
   if (selectedIndex === index) {
     hidePanel();
   } else if (selectedIndex != null && selectedIndex > index) {
     selectedIndex -= 1;
   }
   renderCanvas();
-  // Whatever had focus (the delete badge itself, or the panel's delete
-  // button just before hidePanel() hid its container) was just removed from
-  // the DOM - browsers drop focus to <body> in that case with no visual
-  // indication of where it went. editorCanvasWrap is always present and has
-  // tabindex="-1" (index.html) specifically so it's a valid, stable landing
-  // spot for keyboard users instead of losing focus entirely.
+  // The frame that had keyboard focus was just removed from the DOM -
+  // browsers drop focus to <body> in that case with no visual indication of
+  // where it went. editorCanvasWrap is always present and has tabindex="-1"
+  // (index.html) specifically so it's a valid, stable landing spot for
+  // keyboard users instead of losing focus entirely.
   editorCanvasWrap.focus();
 }
 
@@ -175,18 +191,27 @@ function updateSelectedBoxStyle() {
 // structural separation replaced (a movement-threshold heuristic that
 // intermittently ate clicks and could leave a box stuck to the pointer).
 editorCanvasWrap.addEventListener('pointerdown', (e) => {
-  const moveHandle = e.target.closest('.ovMoveHandle');
+  const frame = e.target.closest('.ovBoxFrame');
   const resizeHandle = e.target.closest('.ovResizeHandle');
-  if (!moveHandle && !resizeHandle) return;
+  if (!frame && !resizeHandle) return;
 
-  const box = (moveHandle || resizeHandle).closest('.ovBox');
+  const box = (frame || resizeHandle).closest('.ovBox');
   const index = Number(box.dataset.index);
   selectLine(index);
+  // Selecting via the frame also means "stop editing this box's text if it
+  // currently has focus" - blur() drops :focus-within, switching the border
+  // from dashed back to solid (see CSS) without needing a separate class.
+  // Checked via document.activeElement rather than a ':focus' selector -
+  // the latter didn't reliably match here even when activeElement was
+  // correct (unlike ':focus-within', which did), so this is the more
+  // robust check regardless of engine quirks.
+  const textEl = box.querySelector('.ovBoxText');
+  if (document.activeElement === textEl) textEl.blur();
   e.preventDefault();
 
   const rect = editorCanvasWrap.getBoundingClientRect();
   const line = detectedLines[index];
-  const handle = moveHandle || resizeHandle;
+  const handle = frame || resizeHandle;
   // setPointerCapture keeps this handle receiving pointermove/up even if the
   // cursor moves outside it mid-drag - a nice-to-have, not a requirement,
   // since pointermove is also handled via delegation on editorCanvasWrap.
@@ -204,7 +229,7 @@ editorCanvasWrap.addEventListener('pointerdown', (e) => {
   }
 
   dragState = {
-    type: moveHandle ? 'move' : 'resize',
+    type: frame ? 'move' : 'resize',
     corner: resizeHandle ? resizeHandle.dataset.corner : null,
     index,
     pointerId: e.pointerId,
@@ -234,28 +259,28 @@ editorCanvasWrap.addEventListener('pointermove', (e) => {
     line.leftPct = dragState.startLeftPct + dxPct;
     line.topPct = dragState.startTopPct + dyPct;
   } else {
+    // PPT-style 8-handle resize: a corner (e.g. "nw") affects both axes, an
+    // edge midpoint (e.g. "n") affects only its one axis - checking which
+    // of n/s/e/w letters appear in the corner name covers both uniformly
+    // instead of needing a separate branch per handle.
     const { startLeftPct: L, startTopPct: T, startWidthPct: W, startHeightPct: H, corner } = dragState;
-    if (corner === 'se') {
-      line.widthPct = Math.max(MIN_BOX_PCT, W + dxPct);
-      line.heightPct = Math.max(MIN_BOX_PCT, H + dyPct);
-    } else if (corner === 'sw') {
-      const newW = Math.max(MIN_BOX_PCT, W - dxPct);
-      line.leftPct = L + (W - newW);
-      line.widthPct = newW;
-      line.heightPct = Math.max(MIN_BOX_PCT, H + dyPct);
-    } else if (corner === 'ne') {
-      line.widthPct = Math.max(MIN_BOX_PCT, W + dxPct);
-      const newH = Math.max(MIN_BOX_PCT, H - dyPct);
-      line.topPct = T + (H - newH);
-      line.heightPct = newH;
-    } else {
-      const newW = Math.max(MIN_BOX_PCT, W - dxPct);
-      const newH = Math.max(MIN_BOX_PCT, H - dyPct);
-      line.leftPct = L + (W - newW);
-      line.topPct = T + (H - newH);
-      line.widthPct = newW;
-      line.heightPct = newH;
+    let newLeft = L, newTop = T, newWidth = W, newHeight = H;
+    if (corner.includes('e')) {
+      newWidth = Math.max(MIN_BOX_PCT, W + dxPct);
+    } else if (corner.includes('w')) {
+      newWidth = Math.max(MIN_BOX_PCT, W - dxPct);
+      newLeft = L + (W - newWidth);
     }
+    if (corner.includes('s')) {
+      newHeight = Math.max(MIN_BOX_PCT, H + dyPct);
+    } else if (corner.includes('n')) {
+      newHeight = Math.max(MIN_BOX_PCT, H - dyPct);
+      newTop = T + (H - newHeight);
+    }
+    line.leftPct = newLeft;
+    line.topPct = newTop;
+    line.widthPct = newWidth;
+    line.heightPct = newHeight;
   }
   clampLine(line);
   updateBoxGeometry(dragState.index);
@@ -268,22 +293,28 @@ function endDrag(e) {
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
 
-// Keyboard-only equivalent for moving a box: the move handle is a real
-// <button>, reachable by Tab, but arrow keys previously did nothing once it
-// had focus - pointer drag was the only way to reposition anything.
-// (Resize doesn't get a keyboard path here - four directions to disambiguate
-// makes the interaction meaningfully more complex, and move already covers
-// the core "get it un-stuck" need.)
+// Keyboard equivalent for a selected box's frame (a real element with
+// tabindex="0", reachable by Tab): arrow keys nudge position, Delete/
+// Backspace removes the whole box. Both are frame-only, never firing while
+// the box's text itself has focus (a separate element - see renderCanvas) -
+// Delete/Backspace typed into the contenteditable text just edits the text
+// as normal, never reaches this listener.
 const ARROW_DELTAS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 editorCanvasWrap.addEventListener('keydown', (e) => {
-  const moveHandle = e.target.closest && e.target.closest('.ovMoveHandle');
-  if (!moveHandle) return;
+  const frame = e.target.closest && e.target.closest('.ovBoxFrame');
+  if (!frame) return;
+  const box = frame.closest('.ovBox');
+  const index = Number(box.dataset.index);
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    deleteLine(index);
+    return;
+  }
   const delta = ARROW_DELTAS[e.key];
   if (!delta) return;
   e.preventDefault();
 
-  const box = moveHandle.closest('.ovBox');
-  const index = Number(box.dataset.index);
   const line = detectedLines[index];
   const step = e.shiftKey ? 2 : 0.5;
   line.leftPct += delta[0] * step;
@@ -292,11 +323,18 @@ editorCanvasWrap.addEventListener('keydown', (e) => {
   updateBoxGeometry(index);
 });
 
-editorCanvasWrap.addEventListener('click', (e) => {
-  const delBtn = e.target.closest('.ovDeleteBtn');
-  if (!delBtn) return;
-  const box = delBtn.closest('.ovBox');
-  deleteLine(Number(box.dataset.index));
+// Escape while typing steps back up from "editing" (dashed border, text
+// focused) to "selected" (solid border, frame focused) rather than doing
+// nothing or leaving the box in an ambiguous state - mirrors the same
+// escape hatch most text-box editors (PowerPoint included) offer.
+editorCanvasWrap.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const textEl = e.target.closest && e.target.closest('.ovBoxText');
+  if (!textEl) return;
+  const box = textEl.closest('.ovBox');
+  textEl.blur();
+  const frame = box.querySelector('.ovBoxFrame');
+  if (frame) frame.focus();
 });
 
 panelFontSize.addEventListener('input', () => {
@@ -328,11 +366,6 @@ panelLineHeight.addEventListener('input', () => {
   detectedLines[selectedIndex].lineHeight = Number(panelLineHeight.value);
   updateSelectedBoxStyle();
 });
-deleteLineBtn.addEventListener('click', () => {
-  if (selectedIndex == null) return;
-  deleteLine(selectedIndex);
-});
-
 addLineBtn.addEventListener('click', () => {
   // No OCR bounding box to inherit - starts as a reasonable default
   // rectangle the user can immediately drag/resize into place with the
@@ -369,9 +402,10 @@ editorBgOpacity.addEventListener('input', () => {
   editorImg.style.opacity = String(Number(editorBgOpacity.value) / 100);
 });
 
-// Live batch toggle (no save/cancel to hide behind): checking it stashes
-// each line's current opacity in _prevOpacity and zeroes it out immediately;
-// unchecking restores each line's own stashed value, not a shared one.
+// Live batch toggle: checking it stashes each line's current opacity in
+// _prevOpacity and zeroes it out immediately; unchecking restores each
+// line's own stashed value, not a shared one. ("取消" below still discards
+// this along with everything else, since it's just another live edit.)
 allTransparentToggle.addEventListener('change', () => {
   if (allTransparentToggle.checked) {
     detectedLines.forEach((line) => {
@@ -390,11 +424,24 @@ allTransparentToggle.addEventListener('change', () => {
   if (selectedIndex != null) selectLine(selectedIndex);
 });
 
+// "取消" discards every edit made since the dialog opened (including boxes
+// added/deleted this session) by restoring detectedLines - the same array
+// reference main.js holds - back to the snapshot taken in mountEditor().
+// Closing the dialog afterwards fires its native 'close' event, which
+// main.js already listens for to resync the read-only preview - no extra
+// wiring needed here beyond the revert itself.
+cancelEditorBtn.addEventListener('click', () => {
+  detectedLines.length = 0;
+  for (const line of snapshot) detectedLines.push({ ...line });
+  editorDialog.close();
+});
+
 // Called once per successful OCR run (and whenever the user re-uploads),
 // mounting the live editing canvas directly against the same detectedLines
 // array main.js will later serialize into the output HTML.
 export function mountEditor(lines, imageDataUrl) {
   detectedLines = lines;
+  snapshot = lines.map((line) => ({ ...line }));
   selectedIndex = null;
   allTransparentToggle.checked = false;
   editorBgOpacity.value = 100;

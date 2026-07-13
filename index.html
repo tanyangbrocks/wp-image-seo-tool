@@ -87,9 +87,9 @@
 
   <div class="mainGrid">
   <div class="panel" id="uploadPanel">
-    <label for="imageInput" class="sectionTitle">1. 選擇圖片</label>
-    <input type="file" id="imageInput" accept="image/*" />
-    <div id="ocrStatus"></div>
+    <label class="sectionTitle">1. 選擇圖片</label>
+    <input type="file" id="imageInput" accept="image/*" hidden />
+    <button type="button" id="chooseImageBtn" class="landingBtn">切換圖片</button>
 
     <div id="previewWrap">
       <img id="previewImg" alt="" />
@@ -97,7 +97,10 @@
   </div>
 
   <div class="panel" id="editPanelWrap">
-    <label class="sectionTitle">圖片預覽</label>
+    <div class="sectionTitleRow">
+      <label class="sectionTitle">圖片預覽</label>
+      <div id="ocrStatus"></div>
+    </div>
     <div id="previewCanvasOuter">
       <div id="previewCanvasWrap">
         <img id="previewCanvasImg" alt="" />
@@ -150,6 +153,7 @@
     <label class="checkboxRow" style="margin:0;"><input type="checkbox" id="allTransparentToggle" /> 全部文字改透明</label>
     <label style="margin:0;">底圖不透明度 <input type="range" id="editorBgOpacity" min="0" max="100" value="100" /></label>
     <span class="editorToolbarSpacer"></span>
+    <button type="button" id="cancelEditorBtn">取消</button>
     <button type="button" id="closeEditorBtn">完成</button>
   </div>
   <p class="smallNote">點選畫布上的文字方塊即可選取、拖曳改位置；直接在方塊上打字可以修改文字內容。</p>
@@ -168,7 +172,6 @@
       <input type="range" id="panelLetterSpacing" min="-0.05" max="0.5" step="0.01" />
       <label for="panelLineHeight">行距</label>
       <input type="range" id="panelLineHeight" min="0.8" max="2.5" step="0.05" />
-      <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
     </div>
   </div>
 </dialog>

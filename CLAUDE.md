@@ -53,13 +53,20 @@ wp-image-seo-tool/
   index.html          結構 + <link>/<script type="module"> 兩個引用
   css/style.css        原本的內嵌 <style> 搬出來
   js/
-    languages.js        LANGUAGES 陣列
-    color.js             otsuThreshold／extractTextColor
+    languages.js        LANGUAGES／PADDLE_SCRIPTS 陣列
+    color.js             otsuThreshold／extractTextColor／漸層偵測／applyTextFillStyle／textFillCss
     ocr-tesseract.js      MIN_LINE_CONFIDENCE／recognizeWithTesseract（信心過濾邏輯在這）
-    ocr-vision.js          groupWordsIntoLines／recognizeWithGoogleVision
-    html-builder.js         escapeHtml／buildFinalHtml
-    preview.js                renderPreview
-    main.js                   DOM 綁定、事件、狀態（imageDataUrl/detectedLines 等）、把上面模組串起來
+    ocr-vision.js          groupWordsIntoLines／recognizeWithGoogleVision（DOCUMENT_TEXT_DETECTION）
+    ocr-paddle.js           recognizeWithPaddleOCR／preloadDefaultModel（預設引擎，CDN 動態 import）
+    text-fit.js              fitTextToBox（字級＋字距聯合擬合）／OVERLAY_FONT_STACK
+    line-merge.js             mergeCloseLines（相近 OCR 行合併成多列文字方塊）
+    html-builder.js            escapeHtml／buildFinalHtml
+    preview.js                  renderPreview（右欄唯讀疊字預覽）
+    editor.js                    mountEditor（`<dialog>` 內的可互動編輯畫布，PPT 式方塊互動）
+    scroll-effects.js             區塊淡入淡出／頂底端橡皮筋回彈（純 JS/CSS，無函式庫）
+    main.js                       DOM 綁定、事件、狀態（imageDataUrl/detectedLines 等）、把上面模組串起來
+  scripts/precheck.js  純 Node 內建模組的專案級靜態檢查（DOM id／import-export／HTML 標籤／CSS 死選擇器／PowerShell 語法／Markdown 連結，每次改完都要跑）
+  docs/manual-review-checklist.md  precheck.js 抓不到、但純讀程式碼推理找得到的 bug 類型清單（race condition／錯誤處理／夾限/鍵盤可及性等），改完重大功能後過一輪
 ```
 
 `Tesseract` 物件是 CDN `<script>`（非 module）掛在 `window` 上的全域變數，`ocr-tesseract.js` 直接引用它，不用額外 import。
@@ -89,7 +96,11 @@ wp-image-seo-tool/
 
 ## 測試方式
 
-沒有測試框架，用 preview 工具手動驗證。**原生檔案選擇對話框無法被自動化工具觸發**，測試上傳圖片流程要用這個模式：
+沒有自動化測試框架，分兩層：
+1. `node scripts/precheck.js` — 純機械式靜態檢查（DOM id／import-export／檔案存在／HTML 標籤配對／PowerShell 語法／Markdown 連結），改完程式碼一定要跑，0 錯誤才算過
+2. [docs/manual-review-checklist.md](docs/manual-review-checklist.md) — precheck 抓不到、但純讀程式碼推理找得到的邏輯類 bug（race condition／缺錯誤處理／夾限不對稱／鍵盤可及性等），改完重大功能後過一輪，新發現的問題類型直接加新項目進去，不要另開檔案
+
+再用 preview 工具手動驗證實際互動。**原生檔案選擇對話框無法被自動化工具觸發**，測試上傳圖片流程要用這個模式：
 
 ```js
 const resp = await fetch('/test-image.png');

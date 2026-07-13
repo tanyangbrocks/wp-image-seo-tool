@@ -43,28 +43,36 @@ body {
    still come from the site's existing tokens/rules below, only the layout
    is new. #workspaceSection (the pre-existing OCR UI) sits right after it
    in normal flow, off-screen below the fold until js/main.js scrolls to it. */
+/* position:relative so .credit (top-right corner badge) can anchor to this
+   section rather than the whole page - it should only show while the
+   landing screen itself is in view. */
 #landingSection {
+  position: relative;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Top-aligned, not vertically centered - freed up once the settings
+     popover stopped opening downward under its button (see .popoverPanel),
+     which used to need the extra room below. */
+  justify-content: flex-start;
   text-align: center;
   gap: 16px;
-  padding: 40px 0;
+  padding: 96px 0 40px;
 }
-/* 36px = the original 24px title, scaled 1.5x. */
-h1 { font-size: 36px; margin: 0; color: var(--highlight); }
-/* font-size matches h1's (both scaled 1.5x together) - only weight/color/
-   opacity still separate title from subtitle. */
-.subtitle { font-size: 36px; font-weight: 400; color: var(--foreground); opacity: 0.7; margin: 0; }
+/* 72px = the 36px title, doubled again. */
+h1 { font-size: 72px; margin: 0; color: var(--highlight); }
+/* 27px = the 36px subtitle, shrunk to 75%. */
+.subtitle { font-size: 27px; font-weight: 400; color: var(--foreground); opacity: 0.7; margin: 0; }
 .landingActions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; margin-top: 12px; }
 .landingBtn {
   padding: 16px 32px; border-radius: 10px; font-size: 18px; font-weight: 700; cursor: pointer;
   border: 1.5px solid var(--highlight); background: #fff; color: var(--highlight);
 }
 .landingBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
-.credit { font-size: 13px; font-weight: 700; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 0; }
+/* Pinned to the landing screen's top-right corner rather than sitting below
+   the buttons in flow - freed-up space from the top-aligned layout above. */
+.credit { position: absolute; top: 24px; right: 24px; font-size: 13px; font-weight: 700; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 /* Highlight-colored (not the subtler border color) per request - the frame
    itself is meant to draw the eye, not just visually contain the image. */
 .creditLogo { width: 20px; height: 20px; object-fit: contain; border-radius: 50%; border: 1.5px solid var(--highlight); }
@@ -91,6 +99,16 @@ label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; c
    (radio/checkbox descriptions, field labels like "字級"/"顏色") stay
    regular text so the accent still reads as "important", not just decorative. */
 .sectionTitle { color: var(--highlight); }
+/* "圖片預覽" heading + #ocrStatus share one line - status text used to sit
+   under the file picker on the left, now lives next to the preview column's
+   own heading on the right instead. */
+.sectionTitleRow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.sectionTitleRow .sectionTitle { margin-bottom: 0; }
+.sectionTitleRow #ocrStatus { margin: 0; text-align: right; }
+/* Same visual form as the landing screen's buttons (.landingBtn) per
+   request - replaces the browser's own native file-picker button/label,
+   which can't be restyled or relabeled directly. */
+#chooseImageBtn { margin-bottom: 16px; }
 input[type="file"], input[type="password"], select, textarea {
   width: 100%;
   padding: 10px;
@@ -124,10 +142,10 @@ textarea { resize: vertical; min-height: 44px; }
    provides the positioning context for its popover. */
 .settingsBar { position: relative; }
 .popoverPanel {
-  /* Centered under the button (left:50%+translateX) rather than right-
-     aligned - #settingsToggleBtn now sits in the middle of the page
-     (.landingActions), not pinned to the top-right corner like before. */
-  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 50;
+  /* To the right of the button, top edge aligned with the button's top
+     edge - not centered underneath it, so opening it no longer eats into
+     the vertical space below (see #landingSection's top-aligned layout). */
+  position: absolute; top: 0; left: calc(100% + 12px); z-index: 50;
   width: min(560px, 90vw);
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 16px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
@@ -139,12 +157,8 @@ textarea { resize: vertical; min-height: 44px; }
   animation: fadeSlideDown 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes fadeSlideDown {
-  /* translateX(-50%) must stay present throughout - it's what keeps the
-     popover centered under its button (see .popoverPanel above); without
-     it here the animation's own `transform` would override that for the
-     whole 220ms, then visibly snap sideways into place when it ends. */
-  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.98); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  from { opacity: 0; transform: translateX(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
 }
 
 /* align-items:stretch so both columns match height - combined with each
@@ -332,11 +346,10 @@ textarea { resize: vertical; min-height: 44px; }
   position: absolute;
   display: flex;
   align-items: center;
-  outline: 1px dashed transparent;
 }
-.ovBox:hover { outline-color: color-mix(in srgb, var(--highlight) 50%, transparent); }
-.ovBox.selected { outline: 2px solid var(--highlight); }
 .ovBoxText {
+  position: relative;
+  z-index: 2;
   width: 100%; height: 100%;
   font-weight: 700;
   /* Must match js/text-fit.js's OVERLAY_FONT_STACK - see .previewLine above. */
@@ -349,55 +362,66 @@ textarea { resize: vertical; min-height: 44px; }
   outline: none;
   cursor: text;
 }
-/* Handles are separate elements from the text box, deliberately outside its
-   click/hit area - this is what keeps "click to type" and "drag to move/
-   resize" from ever being ambiguous (see docs on the bug this replaced). */
-.ovMoveHandle {
-  position: absolute; top: -10px; left: -10px;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  border: 1px solid var(--highlight);
-  background: #fff;
-  color: var(--highlight);
-  font-size: 11px;
-  line-height: 1;
+/* PowerPoint-style text box chrome. The frame sits in a ring just *outside*
+   the text's own edges (inset: -5px) rather than shrinking the text to make
+   room for it - the text stays pixel-identical to its exported size whether
+   or not the box is selected. Where the ring and text would overlap, the
+   text (z-index 2) always wins hit-testing, so a click there always just
+   edits text; the ring itself (z-index 1, nothing else present there) is
+   what you drag to move the box or click to select it without editing -
+   the two hit areas are structurally exclusive, not just visually
+   distinguished, so there's no click-vs-drag ambiguity to resolve at
+   runtime (see docs on the bug the old move-handle/threshold design had). */
+/* Always at least faintly visible (not fully transparent by default) - a
+   box whose text opacity is 0 (the "全部文字改透明" toggle, or a manually
+   zeroed opacity slider) would otherwise have *nothing* on screen to find
+   it by: the text itself is invisible, and a hover-only frame can't be
+   discovered if there's nothing to hover over in the first place. Text
+   opacity 0 is a real, deliberately-supported case here - the overlay text
+   is meant to stay genuinely selectable/copyable even when invisible in
+   the final exported HTML (confirmed separately: opacity:0 does not block
+   Range-based selection), so the editor still needs a way to click it. */
+.ovBoxFrame {
+  position: absolute;
+  inset: -5px;
+  z-index: 1;
+  border: 1px dashed rgba(0, 0, 0, 0.18);
   cursor: move;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
   touch-action: none;
 }
-.ovMoveHandle:hover { background: var(--highlight); color: #fff; }
-.ovDeleteBtn {
-  position: absolute;
-  top: -10px; right: -10px;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  border: 1px solid #c0341d;
-  background: #fff;
-  color: #c0341d;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.ovDeleteBtn:hover { background: #c0341d; color: #fff; }
+/* Default outline suppressed in favor of an explicit :focus-visible
+   replacement below - never suppress it with nothing standing in for it,
+   or a keyboard user tabbing between boxes gets zero indication of which
+   one they're about to move/delete. :focus-visible (not plain :focus) so
+   this only shows for keyboard navigation, not every mouse click. */
+.ovBoxFrame:focus { outline: none; }
+.ovBoxFrame:focus-visible { outline: 2px solid var(--highlight); outline-offset: 2px; }
+.ovBox:hover .ovBoxFrame { border-color: color-mix(in srgb, var(--highlight) 50%, transparent); border-style: dashed; }
+/* Selected-as-object: solid border, draggable via the frame, Delete/
+   Backspace removes the whole box (js/editor.js keydown handler). */
+.ovBox.selected .ovBoxFrame { border-color: var(--highlight); border-style: solid; }
+/* Actively typing (text focused, via :focus-within on the ancestor box):
+   dashed border instead, matching PowerPoint's text-edit state - Delete/
+   Backspace here just edits text normally, doesn't touch the box. */
+.ovBox.selected:focus-within .ovBoxFrame { border-style: dashed; }
 .ovResizeHandle {
   position: absolute;
+  z-index: 3;
   width: 8px; height: 8px;
-  border-radius: 2px;
   background: var(--highlight);
+  border: 1px solid #fff;
   display: none;
   touch-action: none;
 }
 .ovBox.selected .ovResizeHandle { display: block; }
-.ovResizeHandle.nw { top: -4px; left: -4px; cursor: nwse-resize; }
-.ovResizeHandle.ne { top: -4px; right: -4px; cursor: nesw-resize; }
-.ovResizeHandle.sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.ovResizeHandle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.ovResizeHandle.n { top: -5px; left: 50%; margin-left: -4px; cursor: ns-resize; }
+.ovResizeHandle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.ovResizeHandle.e { top: 50%; right: -5px; margin-top: -4px; cursor: ew-resize; }
+.ovResizeHandle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+.ovResizeHandle.s { bottom: -5px; left: 50%; margin-left: -4px; cursor: ns-resize; }
+.ovResizeHandle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.ovResizeHandle.w { top: 50%; left: -5px; margin-top: -4px; cursor: ew-resize; }
 .ovResizeHandle.se { bottom: -4px; right: -4px; cursor: nwse-resize; }
 
 #editorPanel {
@@ -410,11 +434,6 @@ textarea { resize: vertical; min-height: 44px; }
 }
 #editorPanel label { font-size: 13px; margin-bottom: 4px; }
 #editorPanel input[type="range"], #editorPanel input[type="color"] { margin-bottom: 14px; }
-#deleteLineBtn {
-  width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #c0341d;
-  background: #fff; color: #c0341d; cursor: pointer; font-size: 13px;
-}
-#deleteLineBtn:hover { background: #c0341d; color: #fff; }
 
 /* js/scroll-effects.js translates this wrapper on wheel/touch overscroll at
    the page's top/bottom edge, then springs it back to 0 - see that file for

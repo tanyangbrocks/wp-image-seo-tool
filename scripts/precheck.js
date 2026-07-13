@@ -5,8 +5,13 @@
 // What this catches: purely mechanical, cross-referencing bugs - broken
 // imports (typo'd/renamed export), dead DOM hooks (JS looks up an #id that
 // no longer exists in index.html), missing files, duplicate HTML ids,
-// unbalanced tags, and (as a heuristic, not a hard error) CSS selectors that
+// unbalanced tags, PowerShell syntax errors, broken relative links in
+// Markdown docs, and (as a heuristic, not a hard error) CSS selectors that
 // don't match anything live in the project.
+//
+// Scans the whole repo tree (skipping .git) rather than a hardcoded file
+// list, so a new .js/.ps1/.md file dropped in anywhere is automatically
+// covered next run without needing to update this script.
 //
 // What this deliberately does NOT try to catch: logic bugs, race conditions,
 // missing error handlers, accessibility gaps, edge-case math - anything that
@@ -21,6 +26,7 @@ const ROOT = path.resolve(__dirname, '..');
 const JS_DIR = path.join(ROOT, 'js');
 const HTML_FILE = path.join(ROOT, 'index.html');
 const CSS_FILE = path.join(ROOT, 'css', 'style.css');
+const EXCLUDE_DIRS = new Set(['.git', 'node_modules']);
 
 const errors = [];
 const warnings = [];
@@ -28,7 +34,20 @@ const warnings = [];
 function rel(p) { return path.relative(ROOT, p).replace(/\\/g, '/'); }
 function read(p) { return fs.readFileSync(p, 'utf8'); }
 
-const jsFiles = fs.readdirSync(JS_DIR).filter((f) => f.endsWith('.js')).map((f) => path.join(JS_DIR, f));
+// Recursive so a future subdirectory (under js/, or anywhere else scanned
+// below) is picked up automatically instead of silently going unchecked.
+function findFiles(dir, ext) {
+  const found = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (EXCLUDE_DIRS.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...findFiles(full, ext));
+    else if (entry.name.endsWith(ext)) found.push(full);
+  }
+  return found;
+}
+
+const jsFiles = findFiles(JS_DIR, '.js');
 const htmlSrc = read(HTML_FILE);
 const cssSrc = read(CSS_FILE);
 
@@ -199,9 +218,62 @@ const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img'
 }
 
 // ---------------------------------------------------------------------------
+// 8. PowerShell syntax check (docs/archive-done.ps1 and any other .ps1 in the
+//    repo) - parse-only via the PowerShell AST parser, never actually run,
+//    so this is safe even for scripts (like archive-done.ps1) that mutate
+//    real files when executed for real.
+// ---------------------------------------------------------------------------
+const ps1Files = findFiles(ROOT, '.ps1');
+if (ps1Files.length) {
+  const probe = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', 'exit 0']);
+  if (probe.error) {
+    warnings.push(`[skip] PowerShell not found on PATH - skipped syntax check for ${ps1Files.length} .ps1 file(s)`);
+  } else {
+    for (const file of ps1Files) {
+      const escaped = file.replace(/'/g, "''");
+      const result = spawnSync('powershell', [
+        '-NoProfile', '-NonInteractive', '-Command',
+        `$tokens=$null; $errs=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('${escaped}', [ref]$tokens, [ref]$errs); if ($errs.Count -gt 0) { $errs | ForEach-Object { Write-Output $_.Message }; exit 1 }`
+      ], { encoding: 'utf8' });
+      if (result.status !== 0) {
+        const msg = (result.stdout || result.stderr || 'parse error').trim().split('\n').slice(0, 3).join(' | ');
+        errors.push(`[syntax] ${rel(file)}: ${msg}`);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Markdown relative-link check (CLAUDE.md, README.md, 實作進度.md,
+//    docs/*.md) - a link to a moved/renamed/deleted file is a mechanically
+//    certain bug, same class as the html-ref check above. Skips external
+//    (http/https/mailto) links and pure-anchor (#section) links; a
+//    path#anchor link is checked on its path part only.
+// ---------------------------------------------------------------------------
+const mdFiles = findFiles(ROOT, '.md');
+for (const file of mdFiles) {
+  const src = read(file);
+  for (const m of src.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
+    const raw = m[1].trim();
+    if (!raw || /^(https?:)?\/\//.test(raw) || raw.startsWith('mailto:') || raw.startsWith('#')) continue;
+    const linkPath = raw.split('#')[0];
+    if (!linkPath) continue;
+    let target;
+    try {
+      target = path.resolve(path.dirname(file), decodeURIComponent(linkPath));
+    } catch {
+      continue; // malformed %-escape - not this check's concern
+    }
+    if (!fs.existsSync(target)) {
+      errors.push(`[md-link] ${rel(file)}: link to '${raw}' - target does not exist (resolved: ${rel(target)})`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
-console.log(`Checked ${jsFiles.length} JS file(s), index.html, css/style.css.\n`);
+console.log(`Checked ${jsFiles.length} JS file(s), index.html, css/style.css, ${ps1Files.length} .ps1 file(s), ${mdFiles.length} .md file(s).\n`);
 
 if (errors.length) {
   console.log(`ERRORS (${errors.length}) - mechanically certain bugs:`);
