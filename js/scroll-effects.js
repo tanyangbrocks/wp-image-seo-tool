@@ -6,7 +6,7 @@
 // animation library. rootMargin shrinks the trigger rect inward the same way
 // Portfolio's `viewport: { margin: '-40px' }` does, so the fade kicks in
 // slightly before/after the true edge rather than exactly at it.
-const revealTargets = document.querySelectorAll('.headerRow, #uploadPanel, #editPanelWrap, .bottomRow');
+const revealTargets = document.querySelectorAll('#uploadPanel, #editPanelWrap, .bottomRow');
 if (revealTargets.length && 'IntersectionObserver' in window) {
   const revealObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
@@ -30,7 +30,7 @@ if (bounceWrap) {
   const MAX_PULL = 80; // px, clamp on how far the stretch can go
   const RESISTANCE = 0.4; // wheel/touch delta multiplier (rubber-band drag)
   const WHEEL_IDLE_MS = 75; // ms of no wheel events before auto-release
-  const MAX_HOLD_MS = 400; // cap so trackpad momentum tail can't freeze the stretch
+  const MAX_HOLD_MS = 200; // cap so trackpad momentum tail can't freeze the stretch
   const COOLDOWN_MS = 800; // ignore wheel input after a forced release (kills repeat-bounce)
   const BOUNDARY_TOLERANCE = 12; // px tolerance for "am I at top/bottom"
   const DEAD_ZONE = 10; // px of pull absorbed invisibly before any visual stretch shows

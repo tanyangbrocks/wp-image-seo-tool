@@ -4,11 +4,18 @@ import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
 import { mergeCloseLines } from './line-merge.js';
-import { fitFontSizeToBox, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT } from './text-fit.js';
+import { fitTextToBox, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT } from './text-fit.js';
 import { buildFinalHtml } from './html-builder.js';
 import { renderPreview } from './preview.js';
 import { mountEditor } from './editor.js';
 
+const landingSection = document.getElementById('landingSection');
+const workspaceSection = document.getElementById('workspaceSection');
+const landingChooseBtn = document.getElementById('landingChooseBtn');
+const backBtn = document.getElementById('backBtn');
+const backConfirmDialog = document.getElementById('backConfirmDialog');
+const backConfirmYes = document.getElementById('backConfirmYes');
+const backConfirmNo = document.getElementById('backConfirmNo');
 const imageInput = document.getElementById('imageInput');
 const ocrStatus = document.getElementById('ocrStatus');
 const previewWrap = document.getElementById('previewWrap');
@@ -141,6 +148,44 @@ let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSiz
 // its state clobbered by the first one's now-stale results landing late.
 let uploadToken = 0;
 
+// #landingChooseBtn (on #landingSection) just proxies to the real file
+// input rather than being a second one - it lives inside #workspaceSection
+// (index.html), unchanged since before the landing screen existed.
+landingChooseBtn.addEventListener('click', () => imageInput.click());
+
+// "← 上一步" - confirms before discarding whatever's currently loaded/being
+// processed and scrolling back to the landing screen. Bumping uploadToken
+// reuses the same race-guard every async OCR step already checks (see
+// imageInput's 'change' handler below), so an in-flight recognition call
+// that finishes after the user has already backed out silently discards
+// its result instead of clobbering the now-reset UI.
+function resetWorkspace() {
+  ++uploadToken;
+  imageDataUrl = null;
+  naturalWidth = 0;
+  naturalHeight = 0;
+  detectedLines = [];
+  imageInput.value = '';
+  previewImg.removeAttribute('src');
+  previewCanvasImg.removeAttribute('src');
+  renderPreview(previewCanvasWrap, []);
+  openEditorBtn.hidden = true;
+  previewOpacityControls.hidden = true;
+  altInput.value = '';
+  generateBtn.disabled = true;
+  outputWrap.hidden = true;
+  ocrStatus.className = '';
+  ocrStatus.style.display = 'none';
+  ocrStatus.textContent = '';
+}
+backBtn.addEventListener('click', () => backConfirmDialog.showModal());
+backConfirmNo.addEventListener('click', () => backConfirmDialog.close());
+backConfirmYes.addEventListener('click', () => {
+  backConfirmDialog.close();
+  resetWorkspace();
+  landingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
 // The right-panel preview is read-only; actual editing happens in
 // #editorDialog, opened only via the edit button or a double-click on the
 // preview. mountEditor() populates the dialog's interactive canvas against
@@ -227,6 +272,13 @@ previewOverlayOpacity.addEventListener('input', () => {
 imageInput.addEventListener('change', async () => {
   const file = imageInput.files[0];
   if (!file) return;
+
+  // Scrolls before validation (not only on success) so a config error
+  // below ("請先填...金鑰" etc.) is actually visible - #ocrStatus lives
+  // inside #workspaceSection, which is off-screen below #landingSection
+  // until this runs, so a validation failure with no scroll would silently
+  // render an error message the user can't see.
+  workspaceSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const engine = getSelectedEngine();
   const selectedLanguages = getSelectedLanguages();
@@ -331,21 +383,18 @@ imageInput.addEventListener('change', async () => {
           const { x0, y0, x1, y1 } = l;
           const text = l.text.trim();
           const { color, shadow, gradient } = extractTextColor(ctx, x0, y0, x1, y1);
-          const fittedFontSizePx = fitFontSizeToBox(ctx, text, x1 - x0, y1 - y0, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT);
           return {
             text,
             leftPct: (x0 / naturalWidth) * 100,
             topPct: (y0 / naturalHeight) * 100,
             widthPct: ((x1 - x0) / naturalWidth) * 100,
             heightPct: ((y1 - y0) / naturalHeight) * 100,
-            // Font size as a % of image WIDTH (cqw): since the image scales
-            // uniformly (width:100%; height:auto), a size expressed this way
-            // stays proportional to the original bounding box at any render size.
-            // Chosen by fitFontSizeToBox() so the *rendered* string width
-            // actually matches the OCR box width (js/text-fit.js), replacing
-            // the old fixed "box height * 0.85" guess that ignored the
-            // string/font's real advance width and could overflow/underflow.
-            fontSizeCqw: (fittedFontSizePx / naturalWidth) * 100,
+            // fontSizeCqw/letterSpacing/lineHeight are filled in below, after
+            // merging - fitting them per raw OCR line here (before merging)
+            // would fit against a box that a merge might immediately replace
+            // with a taller/wider union box, wasting the fit and leaving a
+            // multi-line merged box using only its first sub-line's numbers.
+            fontSizeCqw: 0,
             color,
             shadow,
             // null unless extractTextColor() detected a real horizontal
@@ -361,8 +410,33 @@ imageInput.addEventListener('change', async () => {
         // paragraph - consecutive lines that are only a small gap apart
         // (and horizontally aligned) are very likely the same multi-line
         // text block in the source image, so merge them into one editable
-        // box instead of leaving them as separate stacked boxes.
-        detectedLines = mergeCloseLines(detectedLines, naturalWidth, naturalHeight);
+        // box instead of leaving them as separate stacked boxes (a single
+        // box can end up with many rows - merging chains, see
+        // js/line-merge.js).
+        detectedLines = mergeCloseLines(detectedLines);
+
+        // Fits font-size + letter-spacing against each (possibly merged)
+        // line's *final* box and joined text - see js/text-fit.js for why
+        // both are solved together instead of only ever adjusting font-size.
+        for (const line of detectedLines) {
+          const boxWidthPx = (line.widthPct / 100) * naturalWidth;
+          const boxHeightPx = (line.heightPct / 100) * naturalHeight;
+          let fit = fitTextToBox(ctx, line.text, boxWidthPx, boxHeightPx, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT);
+          if (line.lineCount > 1) {
+            // Multi-line merged box: line-height and font-size are
+            // circularly related here (see js/text-fit.js), so refit once
+            // more using the real line-height derived from the first pass
+            // instead of that function's flat internal guess - converges
+            // close enough without a full iterative solver.
+            const perLineHeightPx = boxHeightPx / line.lineCount;
+            const measuredLineHeight = Math.min(3, Math.max(0.8, perLineHeightPx / fit.fontSizePx));
+            fit = fitTextToBox(ctx, line.text, boxWidthPx, boxHeightPx, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT, measuredLineHeight);
+            line.lineHeight = Math.min(3, Math.max(0.8, perLineHeightPx / fit.fontSizePx));
+          }
+          line.fontSizeCqw = (fit.fontSizePx / naturalWidth) * 100;
+          line.letterSpacing = fit.letterSpacingEm;
+          delete line.lineCount;
+        }
 
         renderPreview(previewCanvasWrap, detectedLines);
 

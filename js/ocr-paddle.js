@@ -55,6 +55,28 @@ export function preloadDefaultModel() {
   getService(PADDLE_DEFAULT_SCRIPT).catch(() => {});
 }
 
+// Confirmed by direct testing (upload two different images at the exact
+// same pixel dimensions in the same session, back to back): `service.
+// recognize()` on a cached/reused PaddleOcrService instance (see
+// getService() above) silently returns the *previous* call's result
+// whenever the new canvas is the same width/height as the previous one -
+// verified by uploading two 400x200 images with different baked-in text
+// back to back (second call returned the first image's text) vs. a
+// differently-sized third image (correctly recognized). This is a bug in
+// `ppu-paddle-ocr`'s internal caching, not in this file's own logic - the
+// canvas passed in is always freshly created and drawn with the correct
+// new image data. Not reusing the service instance at all would dodge it,
+// but would also throw away the entire point of caching it (skipping
+// PaddleOCR's multi-second model reinit on every single upload). Instead,
+// each call pads the canvas by a small amount that changes call-to-call
+// (bottom/right edges only, so it never shifts any real detected box's
+// coordinates) - just enough to keep consecutive calls from ever sharing
+// identical dimensions, without needing to understand the library's exact
+// internal cache key. The padding itself is blank/white, which this
+// project's own Phase A evaluation (docs/plan-paddleocr-evaluation.md)
+// already confirmed PaddleOCR does not hallucinate text from.
+let recognizeCallCount = 0;
+
 // Returns the same shape the other engines produce: [{ text, x0, y0, x1, y1 }].
 export async function recognizeWithPaddleOCR(imageDataUrl, scriptKey) {
   const service = await getService(scriptKey);
@@ -65,10 +87,14 @@ export async function recognizeWithPaddleOCR(imageDataUrl, scriptKey) {
     el.onerror = () => reject(new Error('圖片載入失敗'));
     el.src = imageDataUrl;
   });
+  const pad = (recognizeCallCount++ % 8) + 1;
   const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  canvas.getContext('2d').drawImage(img, 0, 0);
+  canvas.width = img.naturalWidth + pad;
+  canvas.height = img.naturalHeight + pad;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0);
 
   const result = await service.recognize(canvas, { flatten: true });
   return result.results

@@ -38,22 +38,46 @@ body {
   color: var(--foreground);
   background: var(--background);
 }
-.headerRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+/* Full-viewport intro screen, shown on load - title/subtitle/actions/credit
+   stacked and centered, matching the requested mockup layout. Colors/type
+   still come from the site's existing tokens/rules below, only the layout
+   is new. #workspaceSection (the pre-existing OCR UI) sits right after it
+   in normal flow, off-screen below the fold until js/main.js scrolls to it. */
+#landingSection {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 16px;
+  padding: 40px 0;
+}
 /* 36px = the original 24px title, scaled 1.5x. */
 h1 { font-size: 36px; margin: 0; color: var(--highlight); }
-/* Title and subtitle merged onto a single line (a <span> inside <h1>,
-   not a separate <p>) - kept visually distinct via lighter weight/
-   opacity and the plain foreground color instead of the highlight color.
-   font-size now matches h1's (both scaled 1.5x together) rather than
-   being smaller - only weight/color/opacity still separate title from
-   subtitle. */
-.subtitle { font-size: 36px; font-weight: 400; color: var(--foreground); opacity: 0.7; }
-/* Credit line + settings button share this column so they land centered on
-   the same axis, "nudging" the credit line in from the far edge to align
-   with the button underneath it rather than the two looking unrelated. */
-.headerRight { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.credit { font-size: 13px; font-weight: 700; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; }
-.creditLogo { width: 20px; height: 20px; object-fit: contain; border-radius: 50%; border: 1px solid var(--border); }
+/* font-size matches h1's (both scaled 1.5x together) - only weight/color/
+   opacity still separate title from subtitle. */
+.subtitle { font-size: 36px; font-weight: 400; color: var(--foreground); opacity: 0.7; margin: 0; }
+.landingActions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; margin-top: 12px; }
+.landingBtn {
+  padding: 16px 32px; border-radius: 10px; font-size: 18px; font-weight: 700; cursor: pointer;
+  border: 1.5px solid var(--highlight); background: #fff; color: var(--highlight);
+}
+.landingBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
+.credit { font-size: 13px; font-weight: 700; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 0; }
+/* Highlight-colored (not the subtler border color) per request - the frame
+   itself is meant to draw the eye, not just visually contain the image. */
+.creditLogo { width: 20px; height: 20px; object-fit: contain; border-radius: 50%; border: 1.5px solid var(--highlight); }
+
+/* The pre-existing OCR workspace - unchanged internally, just wrapped in a
+   named section so js/main.js can scrollIntoView() it once an image is
+   picked, and given room at the top for #backBtn. */
+#workspaceSection { padding-top: 8px; }
+#backBtn {
+  background: none; border: none; color: var(--foreground); opacity: 0.6;
+  font-size: 14px; font-weight: 700; cursor: pointer; padding: 8px 0; margin-bottom: 12px;
+}
+#backBtn:hover { opacity: 1; color: var(--highlight); }
 
 .panel {
   background: var(--card);
@@ -95,16 +119,15 @@ textarea { resize: vertical; min-height: 44px; }
 
 /* Collapsible settings menu: closed by default, opens as a floating panel
    overlaid on top of the page instead of pushing the rest of the layout
-   down (unlike the old <details> element it replaced). Lives inside
-   .headerRight now (centered under the credit line), not a full-width row. */
+   down (unlike the old <details> element it replaced). Sizing/color come
+   from .landingBtn now (shared with #landingChooseBtn) - this ID only
+   provides the positioning context for its popover. */
 .settingsBar { position: relative; }
-#settingsToggleBtn {
-  padding: 10px 16px; border-radius: 8px; border: 1.5px solid var(--highlight);
-  background: #fff; color: var(--highlight); font-size: 14px; font-weight: 700; cursor: pointer;
-}
-#settingsToggleBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
 .popoverPanel {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+  /* Centered under the button (left:50%+translateX) rather than right-
+     aligned - #settingsToggleBtn now sits in the middle of the page
+     (.landingActions), not pinned to the top-right corner like before. */
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 50;
   width: min(560px, 90vw);
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 16px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
@@ -116,8 +139,12 @@ textarea { resize: vertical; min-height: 44px; }
   animation: fadeSlideDown 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes fadeSlideDown {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  /* translateX(-50%) must stay present throughout - it's what keeps the
+     popover centered under its button (see .popoverPanel above); without
+     it here the animation's own `transform` would override that for the
+     whole 220ms, then visibly snap sideways into place when it ends. */
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 
 /* align-items:stretch so both columns match height - combined with each
@@ -257,6 +284,27 @@ textarea { resize: vertical; min-height: 44px; }
   background: var(--card);
 }
 #editorDialog::backdrop { background: rgba(0,0,0,0.5); }
+
+/* #backBtn ("← 上一步") opens this to confirm before discarding whatever's
+   currently loaded/edited and scrolling back to #landingSection. */
+#backConfirmDialog {
+  width: min(92vw, 380px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  background: var(--card);
+  text-align: center;
+}
+#backConfirmDialog::backdrop { background: rgba(0,0,0,0.5); }
+#backConfirmDialog p { margin: 0 0 20px; font-size: 15px; color: var(--foreground); }
+.dialogActions { display: flex; justify-content: center; gap: 12px; }
+.dialogActions button {
+  padding: 10px 28px; border-radius: 6px; border: 1.5px solid var(--highlight);
+  background: #fff; color: var(--highlight); cursor: pointer; font-size: 14px; font-weight: 700;
+}
+.dialogActions button:hover { background: var(--highlight); color: var(--highlight-foreground); }
+#backConfirmYes { background: var(--highlight); color: var(--highlight-foreground); }
+#backConfirmYes:hover { background: #fff; color: var(--highlight); }
 .editorToolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 10px; }
 .editorToolbar button {
   padding: 8px 14px; border-radius: 6px; border: 1.5px solid var(--highlight);
@@ -388,7 +436,7 @@ textarea { resize: vertical; min-height: 44px; }
    one-shot reveal animation (see @keyframes fadeSlideUp) triggered when it
    un-hides after "產生 HTML", and layering a second opacity/transform
    transition on top of that would fight it. */
-.headerRow, #uploadPanel, #editPanelWrap, .bottomRow {
+#uploadPanel, #editPanelWrap, .bottomRow {
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
 .scrollFaded { opacity: 0; transform: translateY(16px); }

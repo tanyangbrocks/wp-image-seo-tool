@@ -39,7 +39,13 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
     // (see js/line-merge.js) render as real line breaks instead of one long
     // clipped line; a plain single-line box with no "\n" renders exactly the
     // same either way as long as it fits its box.
-    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre-line; overflow: hidden; display: flex; align-items: center; font-family: ${OVERLAY_FONT_STACK}; font-weight: ${OVERLAY_FONT_WEIGHT}; line-height: ${line.lineHeight ?? 1.05}; letter-spacing: ${line.letterSpacing ?? 0}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; ${textFillCss(line)} text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
+    // toFixed(3) on line-height/letter-spacing: both are now derived from
+    // canvas.measureText() ratios (js/text-fit.js) rather than round slider
+    // values, so without rounding here they'd carry ~17 digits of float
+    // noise into the shipped HTML (harmless to render, just ugly source).
+    const lineHeight = (line.lineHeight ?? 1.05).toFixed(3);
+    const letterSpacing = (line.letterSpacing ?? 0).toFixed(3);
+    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre-line; overflow: hidden; display: flex; align-items: center; font-family: ${OVERLAY_FONT_STACK}; font-weight: ${OVERLAY_FONT_WEIGHT}; line-height: ${lineHeight}; letter-spacing: ${letterSpacing}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; ${textFillCss(line)} text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
   }).join('\n');
 
   // width/height attributes (the image's real intrinsic pixel size, distinct

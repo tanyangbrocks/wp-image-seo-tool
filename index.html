@@ -27,14 +27,18 @@
 
 <div id="pageBounceWrap">
 
-<div class="headerRow">
-  <div>
-    <h1>讓圖片文字可選：<span class="subtitle">令圖片上每個文字都被 WordPress 看見</span></h1>
-  </div>
-  <div class="headerRight">
-    <span class="credit">Created by 彈羊如柳丁 <img src="assets/icon/orange-sheep.png" alt="" class="creditLogo" /></span>
+<!-- First screen the visitor sees - full-viewport intro, no OCR UI yet.
+     #landingChooseBtn just proxies a click to the real #imageInput (still
+     inside #workspaceSection below, unchanged) rather than duplicating the
+     file input - one canonical input, two ways to trigger it. Picking a
+     file scrolls #workspaceSection into view (js/main.js). -->
+<section id="landingSection">
+  <h1>讓圖片文字可選</h1>
+  <p class="subtitle">令圖片上每個文字都被 WordPress 看見</p>
+  <div class="landingActions">
+    <button type="button" id="landingChooseBtn" class="landingBtn">選擇圖片</button>
     <div class="settingsBar">
-      <button type="button" id="settingsToggleBtn" aria-expanded="false">⚙ 辨識引擎與語言設定</button>
+      <button type="button" id="settingsToggleBtn" class="landingBtn" aria-expanded="false">調整辨識語言與引擎</button>
       <div id="settingsPanel" class="popoverPanel" hidden>
         <div class="checkboxRow">
           <input type="radio" name="engineChoice" id="engine_paddle" value="paddle" checked />
@@ -75,9 +79,13 @@
       </div>
     </div>
   </div>
-</div>
+  <p class="credit">Created by 彈羊如柳丁<img src="assets/icon/orange-sheep.png" alt="" class="creditLogo" /></p>
+</section>
 
-<div class="mainGrid">
+<section id="workspaceSection">
+  <button type="button" id="backBtn">← 上一步</button>
+
+  <div class="mainGrid">
   <div class="panel" id="uploadPanel">
     <label for="imageInput" class="sectionTitle">1. 選擇圖片</label>
     <input type="file" id="imageInput" accept="image/*" />
@@ -131,6 +139,8 @@
   </div>
 </div>
 
+</section>
+
 </div>
 
 <dialog id="editorDialog">
@@ -160,6 +170,14 @@
       <input type="range" id="panelLineHeight" min="0.8" max="2.5" step="0.05" />
       <button type="button" id="deleteLineBtn">✕ 刪除這個方塊</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="backConfirmDialog">
+  <p>確定要停止處理目前的圖片嗎？</p>
+  <div class="dialogActions">
+    <button type="button" id="backConfirmNo">否</button>
+    <button type="button" id="backConfirmYes">是</button>
   </div>
 </dialog>
 

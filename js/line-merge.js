@@ -4,7 +4,10 @@
 // merging them into a single multi-line box (rather than N stacked
 // single-line boxes the user would otherwise have to drag/resize/re-word
 // individually) is both a more faithful representation of the source and
-// less editing work.
+// less editing work. Merging chains naturally for any number of lines: each
+// newly-merged line extends `prev`'s box in place, so a third, fourth, etc.
+// line compares its gap against the already-extended box, not just the
+// original first line - a single text box can end up with many rows.
 const VERTICAL_GAP_RATIO = 0.5; // gap must be under 50% of the average line height to merge
 const MIN_HORIZONTAL_OVERLAP = 0.4; // and the two lines' horizontal spans must overlap at least this much
 
@@ -14,15 +17,16 @@ function overlapRatio(a0, a1, b0, b1) {
   return overlap / Math.min(a1 - a0, b1 - b0);
 }
 
-// naturalWidth/naturalHeight are needed to give a merged box a sensible
-// default line-height: fontSizeCqw is expressed as a % of the image's
-// WIDTH (see main.js) while heightPct is a % of the image's HEIGHT, so
-// converting "this box's height, divided across N sub-lines" into a
-// line-height multiplier (a ratio *of the font size*) needs the image's
-// aspect ratio to bridge the two axes - without it, reusing the flat 1.05
-// single-line default on a merged multi-line box would very likely not
-// match the vertical rhythm the OCR boxes actually measured.
-export function mergeCloseLines(lines, naturalWidth, naturalHeight) {
+// Only merges geometry/text - deliberately does NOT touch fontSizeCqw or
+// derive a line-height here. Both depend on the box's *final* font-size,
+// which isn't known yet at this point in the pipeline (js/main.js now fits
+// font-size/letter-spacing *after* merging, against each merged box's real
+// final dimensions and joined text, rather than per original OCR line
+// before merging - see js/text-fit.js). `lineCount` is left on the
+// returned lines (not a private/deleted temp field) specifically so that
+// later line-height step can divide the merged height across the right
+// number of rows.
+export function mergeCloseLines(lines) {
   const sorted = [...lines].sort((a, b) => a.topPct - b.topPct);
   const merged = [];
 
@@ -40,23 +44,11 @@ export function mergeCloseLines(lines, naturalWidth, naturalHeight) {
         prev.leftPct = newLeft;
         prev.widthPct = newRight - newLeft;
         prev.heightPct = newBottom - prev.topPct;
-        prev._lineCount = (prev._lineCount || 1) + 1;
+        prev.lineCount = (prev.lineCount || 1) + 1;
         continue;
       }
     }
-    merged.push({ ...line, _lineCount: 1 });
-  }
-
-  for (const line of merged) {
-    if (line._lineCount > 1 && naturalWidth && naturalHeight && line.fontSizeCqw) {
-      const perLineHeightPct = line.heightPct / line._lineCount;
-      const multiplier = (perLineHeightPct * naturalHeight) / (line.fontSizeCqw * naturalWidth);
-      // Clamped to a sane range - a noisy/overlapping OCR gap could
-      // otherwise produce an extreme multiplier that's worse than the
-      // plain single-line default would have been.
-      line.lineHeight = Math.min(3, Math.max(0.8, multiplier));
-    }
-    delete line._lineCount;
+    merged.push({ ...line, lineCount: 1 });
   }
 
   return merged;
