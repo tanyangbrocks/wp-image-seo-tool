@@ -1,3 +1,6 @@
+import { OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT } from './text-fit.js';
+import { textFillCss } from './color.js';
+
 export function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -36,7 +39,7 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
     // (see js/line-merge.js) render as real line breaks instead of one long
     // clipped line; a plain single-line box with no "\n" renders exactly the
     // same either way as long as it fits its box.
-    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre-line; overflow: hidden; display: flex; align-items: center; font-weight: 700; line-height: ${line.lineHeight ?? 1.05}; letter-spacing: ${line.letterSpacing ?? 0}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; color: ${line.color}; text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
+    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre-line; overflow: hidden; display: flex; align-items: center; font-family: ${OVERLAY_FONT_STACK}; font-weight: ${OVERLAY_FONT_WEIGHT}; line-height: ${line.lineHeight ?? 1.05}; letter-spacing: ${line.letterSpacing ?? 0}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; ${textFillCss(line)} text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
   }).join('\n');
 
   // width/height attributes (the image's real intrinsic pixel size, distinct
@@ -73,6 +76,7 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
   src 換成媒體庫給的真實網址（例如 https://你的網域/wp-content/uploads/...），
   下面的 JSON-LD contentUrl 也一併換成同一個網址，才能真正被圖片搜尋索引。
 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&display=swap">
 <figure style="margin: 0;">
   <div style="position: relative; width: 100%; container-type: inline-size; border-radius: 10px; overflow: hidden;">
     <img src="${imageDataUrl}" alt="${escapedAlt}"${sizeAttrs} loading="lazy" decoding="async" style="display: block; width: 100%; height: auto;" />

@@ -4,6 +4,7 @@ import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
 import { mergeCloseLines } from './line-merge.js';
+import { fitFontSizeToBox, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT } from './text-fit.js';
 import { buildFinalHtml } from './html-builder.js';
 import { renderPreview } from './preview.js';
 import { mountEditor } from './editor.js';
@@ -328,9 +329,11 @@ imageInput.addEventListener('change', async () => {
 
         detectedLines = rawLines.filter((l) => l.text.trim()).map((l) => {
           const { x0, y0, x1, y1 } = l;
-          const { color, shadow } = extractTextColor(ctx, x0, y0, x1, y1);
+          const text = l.text.trim();
+          const { color, shadow, gradient } = extractTextColor(ctx, x0, y0, x1, y1);
+          const fittedFontSizePx = fitFontSizeToBox(ctx, text, x1 - x0, y1 - y0, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT);
           return {
-            text: l.text.trim(),
+            text,
             leftPct: (x0 / naturalWidth) * 100,
             topPct: (y0 / naturalHeight) * 100,
             widthPct: ((x1 - x0) / naturalWidth) * 100,
@@ -338,9 +341,17 @@ imageInput.addEventListener('change', async () => {
             // Font size as a % of image WIDTH (cqw): since the image scales
             // uniformly (width:100%; height:auto), a size expressed this way
             // stays proportional to the original bounding box at any render size.
-            fontSizeCqw: ((y1 - y0) / naturalWidth) * 100 * 0.85,
+            // Chosen by fitFontSizeToBox() so the *rendered* string width
+            // actually matches the OCR box width (js/text-fit.js), replacing
+            // the old fixed "box height * 0.85" guess that ignored the
+            // string/font's real advance width and could overflow/underflow.
+            fontSizeCqw: (fittedFontSizePx / naturalWidth) * 100,
             color,
             shadow,
+            // null unless extractTextColor() detected a real horizontal
+            // color shift across the line (js/color.js) - rendering paths
+            // fall back to the flat `color` above whenever this is null.
+            gradient,
             opacity: 1,
             letterSpacing: 0,
             lineHeight: 1.05

@@ -27,6 +27,16 @@ export function otsuThreshold(grayValues, total) {
   return threshold;
 }
 
+// Minimum combined per-channel color difference (0-765, sum of |ΔR|+|ΔG|+|ΔB|)
+// between the leftmost and rightmost thirds of a text region before it's
+// classified as a gradient fill rather than flat color. No prior art was
+// found for this specific check (see
+// docs/report-ocr-overlay-optimization.md §疊字覆蓋生成 §3) - this threshold
+// is a first-pass estimate, not empirically tuned, chosen to be well above
+// the kind of channel noise plain JPEG/PNG compression or anti-aliasing
+// would produce on an otherwise-flat color.
+const GRADIENT_MIN_DELTA = 40;
+
 // Extracts the actual text color from a detected-line region: splits pixels
 // into two groups via Otsu thresholding, treats the smaller group (by pixel
 // count) as the text - a line's bounding box is mostly background/letter-
@@ -41,7 +51,8 @@ export function extractTextColor(ctx, x0, y0, x1, y1) {
   const pixels = [];
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
-    pixels.push({ r, g, b, gray: 0.299 * r + 0.587 * g + 0.114 * b });
+    const x = (i / 4) % w;
+    pixels.push({ r, g, b, x, gray: 0.299 * r + 0.587 * g + 0.114 * b });
   }
 
   const threshold = otsuThreshold(pixels.map((p) => p.gray), pixels.length);
@@ -63,8 +74,77 @@ export function extractTextColor(ctx, x0, y0, x1, y1) {
     // Shadow contrasts against the *text* color itself (not the background),
     // so the overlay stays legible even if it lands over a busier part of
     // the real image than the original bounding box sampled.
-    shadow: textBrightness > 140 ? '0 1px 3px rgba(0,0,0,0.55)' : '0 1px 3px rgba(255,255,255,0.55)'
+    shadow: textBrightness > 140 ? '0 1px 3px rgba(0,0,0,0.55)' : '0 1px 3px rgba(255,255,255,0.55)',
+    gradient: detectHorizontalGradient(textGroup, w)
   };
+}
+
+// Splits the already-identified text pixels into left/middle/right thirds
+// (by x-position within the region) and compares their average colors - a
+// flat-colored text region's thirds land close together; a genuine
+// horizontal gradient fill shows a real shift across them. Returns null
+// (meaning "render as flat color.textColor like before") unless the region
+// is wide enough to have real per-third signal and the shift clears
+// GRADIENT_MIN_DELTA, so noise/anti-aliasing on ordinary flat-color text
+// doesn't get misread as a gradient.
+function detectHorizontalGradient(textGroup, w) {
+  if (w < 24 || textGroup.length < 12) return null;
+
+  const bins = [[], [], []];
+  for (const p of textGroup) {
+    const bin = Math.min(2, Math.floor((p.x / w) * 3));
+    bins[bin].push(p);
+  }
+  if (bins.some((b) => b.length < 3)) return null;
+
+  function avg(group) {
+    const sum = group.reduce((a, p) => ({ r: a.r + p.r, g: a.g + p.g, b: a.b + p.b }), { r: 0, g: 0, b: 0 });
+    return { r: sum.r / group.length, g: sum.g / group.length, b: sum.b / group.length };
+  }
+  const binColors = bins.map(avg);
+  const [left, , right] = binColors;
+  const delta = Math.abs(left.r - right.r) + Math.abs(left.g - right.g) + Math.abs(left.b - right.b);
+  if (delta < GRADIENT_MIN_DELTA) return null;
+
+  return binColors.map((c) => `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`);
+}
+
+// Applies a detected line's fill to a live DOM element (js/preview.js,
+// js/editor.js): a flat `color`, or - when extractTextColor() found a real
+// horizontal shift - a `background-clip: text` gradient built from the
+// sampled stops instead. `-webkit-` prefixed properties are still required
+// for `background-clip: text` in some browsers even though the unprefixed
+// form is now widely supported.
+export function applyTextFillStyle(el, line) {
+  if (line.gradient && line.gradient.length) {
+    el.style.color = 'transparent';
+    el.style.backgroundImage = `linear-gradient(to right, ${line.gradient.join(', ')})`;
+    el.style.backgroundClip = 'text';
+    el.style.webkitBackgroundClip = 'text';
+    el.style.webkitTextFillColor = 'transparent';
+    // caret-color inherits `color` (transparent) by default - harmless on
+    // js/preview.js's non-editable spans, but on js/editor.js's
+    // contenteditable box it would make the text cursor invisible while
+    // typing, so it's pinned to a real color whenever a gradient fill is active.
+    el.style.caretColor = '#000';
+  } else {
+    el.style.color = line.color;
+    el.style.backgroundImage = '';
+    el.style.backgroundClip = '';
+    el.style.webkitBackgroundClip = '';
+    el.style.webkitTextFillColor = '';
+    el.style.caretColor = '';
+  }
+}
+
+// Same fill logic as applyTextFillStyle() above but as a CSS declaration
+// string fragment, for js/html-builder.js's generated (non-live) HTML.
+export function textFillCss(line) {
+  if (line.gradient && line.gradient.length) {
+    const stops = line.gradient.join(', ');
+    return `color: transparent; background-image: linear-gradient(to right, ${stops}); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;`;
+  }
+  return `color: ${line.color};`;
 }
 
 // The manual editor's color picker (<input type="color">) only accepts hex,

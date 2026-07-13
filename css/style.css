@@ -39,17 +39,21 @@ body {
   background: var(--background);
 }
 .headerRow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-h1 { font-size: 24px; margin: 0; color: var(--highlight); }
+/* 36px = the original 24px title, scaled 1.5x. */
+h1 { font-size: 36px; margin: 0; color: var(--highlight); }
 /* Title and subtitle merged onto a single line (a <span> inside <h1>,
-   not a separate <p>) - kept visually distinct via lighter weight/size/
-   opacity and the plain foreground color instead of the highlight color. */
-.subtitle { font-size: 15px; font-weight: 400; color: var(--foreground); opacity: 0.7; }
+   not a separate <p>) - kept visually distinct via lighter weight/
+   opacity and the plain foreground color instead of the highlight color.
+   font-size now matches h1's (both scaled 1.5x together) rather than
+   being smaller - only weight/color/opacity still separate title from
+   subtitle. */
+.subtitle { font-size: 36px; font-weight: 400; color: var(--foreground); opacity: 0.7; }
 /* Credit line + settings button share this column so they land centered on
    the same axis, "nudging" the credit line in from the far edge to align
    with the button underneath it rather than the two looking unrelated. */
 .headerRight { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.credit { font-size: 13px; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; }
-.creditLogo { width: 20px; height: 20px; object-fit: contain; border-radius: 4px; }
+.credit { font-size: 13px; font-weight: 700; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; }
+.creditLogo { width: 20px; height: 20px; object-fit: contain; border-radius: 50%; border: 1px solid var(--border); }
 
 .panel {
   background: var(--card);
@@ -81,9 +85,10 @@ textarea { resize: vertical; min-height: 44px; }
 #languageList { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 #languageList .checkboxRow { margin-bottom: 8px; width: 130px; }
 
+/* Padding/font-size/border-radius are the original values scaled 1.5x. */
 .genBtn {
-  background: #fff; color: var(--highlight); border: 1.5px solid var(--highlight); padding: 12px 24px;
-  border-radius: 6px; font-size: 15px; font-weight: 700; cursor: pointer;
+  background: #fff; color: var(--highlight); border: 2px solid var(--highlight); padding: 18px 36px;
+  border-radius: 9px; font-size: 22.5px; font-weight: 700; cursor: pointer;
 }
 .genBtn:hover:not(:disabled) { background: var(--highlight); color: var(--highlight-foreground); }
 .genBtn:disabled { background: #eee; color: #999; border-color: #ccc; cursor: not-allowed; }
@@ -177,6 +182,10 @@ textarea { resize: vertical; min-height: 44px; }
   display: flex;
   align-items: center;
   font-weight: 700;
+  /* Must match js/text-fit.js's OVERLAY_FONT_STACK - that constant is what
+     js/main.js measures against to fit each line's font-size to its OCR
+     box, so rendering in a different font here would make that fit wrong. */
+  font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', -apple-system, sans-serif;
   /* line-height/letter-spacing/white-space are set inline per-line by
      js/preview.js (defaults 1.05/0/pre-line) - pre-line so a merged
      multi-line box's "\n"s (js/line-merge.js) render as real breaks. */
@@ -196,7 +205,7 @@ textarea { resize: vertical; min-height: 44px; }
 
 .bottomRow { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: end; margin-bottom: 20px; }
 .bottomRow .panel { margin-bottom: 0; }
-.bottomRow .genBtn { justify-self: start; }
+.bottomRow .genBtn { justify-self: end; }
 
 #outputWrap[hidden] { display: none; }
 /* Same bouncy entrance every time this section un-hides (each "產生 HTML" click). */
@@ -282,6 +291,8 @@ textarea { resize: vertical; min-height: 44px; }
 .ovBoxText {
   width: 100%; height: 100%;
   font-weight: 700;
+  /* Must match js/text-fit.js's OVERLAY_FONT_STACK - see .previewLine above. */
+  font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', -apple-system, sans-serif;
   /* line-height/letter-spacing/white-space are set inline per-line by
      js/editor.js (defaults 1.05/0/pre-line) - pre-line so a merged
      multi-line box's "\n"s (js/line-merge.js) render as real breaks. */

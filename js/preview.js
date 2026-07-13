@@ -1,3 +1,5 @@
+import { applyTextFillStyle } from './color.js';
+
 // Read-only overlay preview - shows detectedLines directly on top of the
 // image with no interactive handles and no contenteditable. This is what
 // appears immediately after OCR completes; actual editing only happens in
@@ -14,7 +16,7 @@ export function renderPreview(wrap, detectedLines) {
     el.style.width = line.widthPct + '%';
     el.style.height = line.heightPct + '%';
     el.style.fontSize = line.fontSizeCqw + 'cqw';
-    el.style.color = line.color;
+    applyTextFillStyle(el, line);
     el.style.textShadow = line.shadow;
     el.style.opacity = String(line.opacity ?? 1);
     el.style.letterSpacing = (line.letterSpacing ?? 0) + 'em';

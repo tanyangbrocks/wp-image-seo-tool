@@ -12,6 +12,15 @@
 <link rel="preconnect" href="https://media.githubusercontent.com" crossorigin />
 <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin />
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- Overlay text (js/text-fit.js OVERLAY_FONT_STACK) renders in Noto Sans TC
+     rather than only whatever CJK font happens to be installed locally -
+     broad Traditional Chinese + Latin coverage, variable weight axis, and
+     Google's CDN auto-subsets to just the glyphs actually used instead of
+     shipping the full multi-MB font file (see
+     docs/report-ocr-overlay-optimization.md §疊字覆蓋生成 §2). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>

@@ -1,4 +1,4 @@
-import { rgbToHex, hexToRgb } from './color.js';
+import { rgbToHex, hexToRgb, applyTextFillStyle } from './color.js';
 
 const editorImg = document.getElementById('editorImg');
 const editorCanvasWrap = document.getElementById('editorCanvasWrap');
@@ -39,7 +39,7 @@ function renderCanvas() {
     textEl.contentEditable = 'true';
     textEl.textContent = line.text;
     textEl.style.fontSize = line.fontSizeCqw + 'cqw';
-    textEl.style.color = line.color;
+    applyTextFillStyle(textEl, line);
     textEl.style.textShadow = line.shadow;
     textEl.style.opacity = String(line.opacity ?? 1);
     textEl.style.letterSpacing = (line.letterSpacing ?? 0) + 'em';
@@ -163,7 +163,7 @@ function updateSelectedBoxStyle() {
   const textEl = box.querySelector('.ovBoxText');
   const line = detectedLines[selectedIndex];
   textEl.style.fontSize = line.fontSizeCqw + 'cqw';
-  textEl.style.color = line.color;
+  applyTextFillStyle(textEl, line);
   textEl.style.opacity = String(line.opacity ?? 1);
   textEl.style.letterSpacing = (line.letterSpacing ?? 0) + 'em';
   textEl.style.lineHeight = String(line.lineHeight ?? 1.05);
@@ -307,6 +307,10 @@ panelFontSize.addEventListener('input', () => {
 panelColor.addEventListener('input', () => {
   if (selectedIndex == null) return;
   detectedLines[selectedIndex].color = hexToRgb(panelColor.value);
+  // A manual color pick is an explicit override - if this line had an
+  // auto-detected gradient fill (js/color.js), it should stop taking
+  // priority over the flat color the user just chose.
+  detectedLines[selectedIndex].gradient = null;
   updateSelectedBoxStyle();
 });
 panelOpacity.addEventListener('input', () => {
