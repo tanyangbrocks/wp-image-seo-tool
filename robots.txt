@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://wp-image-seo-tool.vercel.app/sitemap.xml

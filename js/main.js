@@ -3,6 +3,7 @@ import { extractTextColor } from './color.js';
 import { recognizeWithGoogleVision } from './ocr-vision.js';
 import { recognizeWithTesseract } from './ocr-tesseract.js';
 import { recognizeWithPaddleOCR, preloadDefaultModel } from './ocr-paddle.js';
+import { prepareImageForOcr } from './image-prep.js';
 import { mergeCloseLines } from './line-merge.js';
 import { fitTextToBox, OVERLAY_FONT_STACK, OVERLAY_FONT_WEIGHT } from './text-fit.js';
 import { buildFinalHtml } from './html-builder.js';
@@ -359,29 +360,45 @@ imageInput.addEventListener('change', async () => {
         const visionLangHints = selectedLanguages.map((l) => l.vision);
         const paddleScriptKey = paddleScriptSelect.value;
 
+        // Small/low-res source images hurt OCR accuracy (text only a
+        // handful of pixels tall is where engines misread/split
+        // characters) - upscale before recognition when the image is
+        // below a reasonable working resolution (see js/image-prep.js).
+        // ocrScale is 1 (no-op) for images that are already big enough.
+        const { dataUrl: upscaledDataUrl, scale: ocrScale } = prepareImageForOcr(img, naturalWidth, naturalHeight);
+        const ocrInputDataUrl = upscaledDataUrl || imageDataUrl;
+
         if (engine === 'vision') {
           try {
             ocrStatus.textContent = '正在用 Google Cloud Vision 辨識圖片中的文字與位置…';
-            rawLines = await recognizeWithGoogleVision(imageDataUrl, apiKeyInput.value.trim(), visionLangHints);
+            rawLines = await recognizeWithGoogleVision(ocrInputDataUrl, apiKeyInput.value.trim(), visionLangHints);
           } catch (cloudErr) {
             // Fall back to PaddleOCR (the default engine) rather than
             // dead-ending the whole flow on a bad/expired key or network hiccup.
             ocrStatus.textContent = `Google Cloud Vision 辨識失敗（${cloudErr.message}），改用 PaddleOCR…`;
-            rawLines = await recognizeWithPaddleOCR(imageDataUrl, PADDLE_DEFAULT_SCRIPT);
+            rawLines = await recognizeWithPaddleOCR(ocrInputDataUrl, PADDLE_DEFAULT_SCRIPT);
           }
         } else if (engine === 'tesseract') {
           // Only load/use the languages the user actually checked - fewer
           // languages means a smaller model download and less ambiguity
           // between similarly-shaped characters across scripts.
-          rawLines = await recognizeWithTesseract(imageDataUrl, tesseractLangString, (progress) => {
+          rawLines = await recognizeWithTesseract(ocrInputDataUrl, tesseractLangString, (progress) => {
             ocrStatus.textContent = `正在辨識圖片中的文字與位置…${Math.round(progress * 100)}%`;
           });
         } else {
           ocrStatus.textContent = '正在用 PaddleOCR 辨識圖片中的文字與位置（第一次使用需要下載模型，可能需要幾秒到十幾秒）…';
-          rawLines = await recognizeWithPaddleOCR(imageDataUrl, paddleScriptKey);
+          rawLines = await recognizeWithPaddleOCR(ocrInputDataUrl, paddleScriptKey);
         }
 
         if (thisUploadToken !== uploadToken) return; // superseded while OCR was running - discard these stale results silently
+
+        // Box coordinates came back in the upscaled image's pixel space -
+        // scale them back down to natural-image pixels before anything
+        // downstream (percentage-of-natural-size math, color sampling
+        // against the natural-size `ctx` canvas below) touches them.
+        if (ocrScale !== 1) {
+          rawLines = rawLines.map((l) => ({ ...l, x0: l.x0 / ocrScale, y0: l.y0 / ocrScale, x1: l.x1 / ocrScale, y1: l.y1 / ocrScale }));
+        }
 
         detectedLines = rawLines.filter((l) => l.text.trim()).map((l) => {
           const { x0, y0, x1, y1 } = l;

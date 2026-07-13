@@ -2,7 +2,25 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8" />
-<title>WordPress 疊字圖片產生器</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>讓圖片文字可選｜WordPress 圖片疊字 SEO 產生器</title>
+<meta name="description" content="上傳本身已畫有文字的圖片（AI 生成海報、行銷banner等），自動 OCR 辨識文字內容/位置/顏色，還原成疊在圖片上的真 HTML 文字——可被搜尋引擎索引、可被螢幕閱讀器讀出、可被使用者選取複製，一鍵產生可直接貼進 WordPress 自訂 HTML 區塊的內容。" />
+<link rel="canonical" href="https://wp-image-seo-tool.vercel.app/" />
+<!-- Open Graph / Twitter Card - read by social share previews and by many
+     AI/LLM web-summarization crawlers as a page's title+description source,
+     same purpose as the <meta name="description"> above but for that
+     audience. og:image reuses the existing favicon asset rather than
+     shipping a dedicated banner image - this is a utility tool, not a
+     content site, so a purpose-made social banner isn't worth the extra
+     asset for now. -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="讓圖片文字可選｜WordPress 圖片疊字 SEO 產生器" />
+<meta property="og:description" content="上傳本身已畫有文字的圖片，自動 OCR 辨識還原成可被搜尋引擎索引、可選取複製的真 HTML 文字，一鍵產生可貼進 WordPress 的內容。" />
+<meta property="og:url" content="https://wp-image-seo-tool.vercel.app/" />
+<meta property="og:image" content="https://wp-image-seo-tool.vercel.app/assets/icon/orange-sheep.png" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="讓圖片文字可選｜WordPress 圖片疊字 SEO 產生器" />
+<meta name="twitter:description" content="上傳本身已畫有文字的圖片，自動 OCR 辨識還原成可被搜尋引擎索引、可選取複製的真 HTML 文字。" />
 <link rel="icon" type="image/png" href="assets/icon/orange-sheep.png" />
 <!-- PaddleOCR (default engine) loads its JS module from jsdelivr and its
      model weights from these two GitHub hosts (see js/ocr-paddle.js) -
@@ -22,10 +40,29 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="css/style.css" />
+<!-- WebApplication, not Article/Product - this page IS a free browser-based
+     tool, not content describing one. Helps both classic SEO rich-result
+     eligibility and AI/LLM crawlers that read JSON-LD to understand what a
+     page actually does. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "讓圖片文字可選",
+  "url": "https://wp-image-seo-tool.vercel.app/",
+  "description": "上傳本身已畫有文字的圖片，自動 OCR 辨識文字內容/位置/顏色，還原成疊在圖片上可被搜尋引擎索引、可被選取複製的真 HTML 文字，一鍵產生可貼進 WordPress 自訂 HTML 區塊的內容。",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Any (web browser)",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" },
+  "inLanguage": "zh-Hant"
+}
+</script>
 </head>
 <body>
 
 <div id="pageBounceWrap">
+
+<main>
 
 <!-- First screen the visitor sees - full-viewport intro, no OCR UI yet.
      #landingChooseBtn just proxies a click to the real #imageInput (still
@@ -143,6 +180,8 @@
 </div>
 
 </section>
+
+</main>
 
 </div>
 
