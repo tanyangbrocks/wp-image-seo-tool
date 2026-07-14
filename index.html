@@ -164,7 +164,7 @@
   <label class="sectionTitle">3. 完整 HTML（複製貼到 WordPress「自訂 HTML」區塊）</label>
   <p class="smallNote">
     已加上 <code>&lt;figure&gt;</code>/<code>&lt;figcaption&gt;</code>、圖片 <code>width</code>/<code>height</code>（避免版面跳動）、<code>loading="lazy"</code> 與 <code>ImageObject</code> 結構化資料（JSON-LD），優化圖片 SEO/GEO。
-    <b>貼上 WordPress 後強烈建議額外把圖片上傳到媒體庫，把 <code>&lt;img&gt;</code> 的網址換成媒體庫給的真實網址</b>——目前是 base64 內嵌圖片，Google 圖片搜尋等引擎無法索引，換成真實網址才能真正被搜尋到（HTML 裡也留了同樣的提醒註解）。
+    <b><code>&lt;img&gt;</code> 的 src 是你上傳圖片的檔名（不是完整網址）</b>——請把同一個檔案上傳到 WordPress 媒體庫，檔名要完全一致瀏覽器才找得到圖（HTML 裡也留了同樣的提醒註解）。
   </p>
   <textarea id="htmlOutput" readonly></textarea>
   <button class="copyBtn" id="copyBtn">複製 HTML</button>

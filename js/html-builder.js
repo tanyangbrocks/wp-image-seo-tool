@@ -15,19 +15,20 @@ export function escapeHtml(str) {
 // escaping, but a literal "</script" inside the alt text would still break
 // out of the tag early, so "<" is additionally neutralized to "<"
 // (the standard technique for embedding JSON inside HTML).
-function buildImageObjectJsonLd(imageDataUrl, altText) {
+function buildImageObjectJsonLd(imageSrc, altText) {
   const json = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'ImageObject',
-    contentUrl: imageDataUrl,
+    contentUrl: imageSrc,
     caption: altText,
     description: altText
   });
   return json.replace(/</g, '\\u003c');
 }
 
-export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight) {
+export function buildFinalHtml(imageSrc, altText, detectedLines, naturalWidth, naturalHeight) {
   const escapedAlt = escapeHtml(altText);
+  const escapedSrc = escapeHtml(imageSrc);
   const lineDivs = detectedLines.map((line) => {
     // opacity: per-block, live-editable in the manual overlay editor
     // (defaults to fully opaque for lines that predate that feature).
@@ -85,19 +86,18 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
   // img.clientHeight (501px) with the old single-container structure, a
   // systematic vertical offset that grew with each line's topPct.
   return `<!--
-  SEO 提醒：<img> 的 src 目前是 base64 內嵌圖片（data:image/...），
-  Google 圖片搜尋等引擎無法索引 base64 圖片，也無法被加進圖片 sitemap。
-  貼上 WordPress 後，建議額外把這張圖上傳到媒體庫，再把下面 <img> 的
-  src 換成媒體庫給的真實網址（例如 https://你的網域/wp-content/uploads/...），
-  下面的 JSON-LD contentUrl 也一併換成同一個網址，才能真正被圖片搜尋索引。
+  SEO 提醒：<img> 的 src 目前只有檔名（${escapedSrc}），不是完整網址——
+  請先把這張圖上傳到 WordPress 媒體庫（檔名務必跟這裡一致，否則抓不到
+  圖），瀏覽器才找得到圖片；下面的 JSON-LD contentUrl 也是同一個檔名，
+  一併確認媒體庫的檔名有對上。
 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100..900&display=swap">
 <figure style="margin: 0;">
   <div style="position: relative; width: 100%; container-type: inline-size; border-radius: 10px; overflow: hidden;">
-    <img src="${imageDataUrl}" alt="${escapedAlt}"${sizeAttrs} loading="lazy" decoding="async" style="display: block; width: 100%; height: auto;" />
+    <img src="${escapedSrc}" alt="${escapedAlt}"${sizeAttrs} loading="lazy" decoding="async" style="display: block; width: 100%; height: auto;" />
 ${lineDivs}
   </div>
   <figcaption style="margin-top: 8px; font-size: 13px; color: #666; text-align: center;">${escapedAlt}</figcaption>
 </figure>
-<script type="application/ld+json">${buildImageObjectJsonLd(imageDataUrl, altText)}</script>`;
+<script type="application/ld+json">${buildImageObjectJsonLd(imageSrc, altText)}</script>`;
 }

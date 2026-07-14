@@ -55,6 +55,7 @@ if (getSelectedEngine() === 'paddle') {
 }
 
 let imageDataUrl = null;
+let imageFileName = '';
 let naturalWidth = 0;
 let naturalHeight = 0;
 let detectedLines = []; // { text, leftPct, topPct, widthPct, heightPct, fontSizeCqw, color, shadow, opacity }
@@ -93,6 +94,7 @@ function clearResultsUI() {
 function resetWorkspace() {
   ++uploadToken;
   imageDataUrl = null;
+  imageFileName = '';
   naturalWidth = 0;
   naturalHeight = 0;
   imageInput.value = '';
@@ -156,7 +158,7 @@ altInput.addEventListener('input', () => {
 });
 
 generateBtn.addEventListener('click', () => {
-  generateAndPreview({ imageDataUrl, altText: altInput.value.trim(), detectedLines, naturalWidth, naturalHeight });
+  generateAndPreview({ imageDataUrl, imageFileName, altText: altInput.value.trim(), detectedLines, naturalWidth, naturalHeight });
 });
 
 imageInput.addEventListener('change', async () => {
@@ -196,6 +198,7 @@ imageInput.addEventListener('change', async () => {
   reader.onload = async (e) => {
     if (thisUploadToken !== uploadToken) return; // superseded by a newer upload before the file even finished reading
     imageDataUrl = e.target.result;
+    imageFileName = file.name;
     clearResultsUI();
 
     ocrStatus.className = '';

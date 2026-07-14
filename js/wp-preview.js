@@ -11,18 +11,28 @@ const wpPreviewFrame = document.getElementById('wpPreviewFrame');
 const previewBgOpacity = document.getElementById('previewBgOpacity');
 const previewOverlayOpacity = document.getElementById('previewOverlayOpacity');
 
-export function generateAndPreview({ imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight }) {
+export function generateAndPreview({ imageDataUrl, imageFileName, altText, detectedLines, naturalWidth, naturalHeight }) {
   if (!altText || !imageDataUrl) return;
 
-  const html = buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight);
+  // The copyable output (what actually gets pasted into WordPress) uses just
+  // the uploaded file's name as <img src> - the user uploads that same file
+  // to their media library separately (this tool has no WordPress
+  // credentials/API access to do that upload itself), so the filename is
+  // what has to match, not a URL this tool could never construct correctly
+  // anyway (it doesn't know the site's domain or WordPress's upload-date
+  // subfolder).
+  const html = buildFinalHtml(imageFileName, altText, detectedLines, naturalWidth, naturalHeight);
   htmlOutput.value = html;
   outputWrap.hidden = false;
 
-  // Renders the *actual* generated HTML string in an isolated document
-  // (srcdoc), not the app's own live overlay state - this is what WordPress
-  // would really produce from pasting that HTML, catching any bugs in
-  // buildFinalHtml() itself (e.g. escaping) that the live preview wouldn't.
-  wpPreviewFrame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;}</style></head><body>${html}</body></html>`;
+  // The iframe preview calls buildFinalHtml() a second time with the real
+  // base64 data URL instead of the filename - same code path as the actual
+  // output (still catches any buildFinalHtml() bugs, e.g. escaping), but
+  // with a resolvable image source so it visually renders instead of
+  // showing a broken-image icon, letting the user check overlay-text
+  // placement against the real photo before ever touching WordPress.
+  const previewHtml = buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight);
+  wpPreviewFrame.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0;font-family:-apple-system,"Microsoft JhengHei","PingFang TC",sans-serif;}</style></head><body>${previewHtml}</body></html>`;
 }
 
 // The two preview-only opacity sliders operate directly on the iframe's
