@@ -35,17 +35,26 @@ export function buildFinalHtml(imageDataUrl, altText, detectedLines, naturalWidt
     // added lines get a default rectangle and, like OCR-sourced ones, can be
     // resized with the editor's corner handles (see js/editor.js).
     const opacity = line.opacity ?? 1;
-    // white-space: pre-line (not nowrap) so a merged multi-line box's "\n"s
-    // (see js/line-merge.js) render as real line breaks instead of one long
-    // clipped line; a plain single-line box with no "\n" renders exactly the
-    // same either way as long as it fits its box.
+    // white-space: pre (not pre-line/nowrap) so a merged multi-line box's
+    // "\n"s (see js/line-merge.js) render as real line breaks, but the
+    // browser can never *additionally* wrap within one of those lines if
+    // js/text-fit.js's fitted font-size/letter-spacing doesn't land
+    // pixel-perfect on the box's actual rendered width (small measurement/
+    // rounding gaps between its canvas-based estimate and real CSS layout
+    // are normal) - confirmed real bug: pre-line let the browser wrap a
+    // CJK character onto a new line when a fit was even a few px too wide,
+    // which cascaded into pushing every subsequent line down and off the
+    // bottom edge under overflow:hidden, silently deleting whole lines of
+    // text from the shipped HTML. A single line clipping a few px narrower
+    // than intended (pre-line's own known residual, still possible here
+    // too) is a far smaller problem than a line disappearing outright.
     // toFixed(3) on line-height/letter-spacing: both are now derived from
     // canvas.measureText() ratios (js/text-fit.js) rather than round slider
     // values, so without rounding here they'd carry ~17 digits of float
     // noise into the shipped HTML (harmless to render, just ugly source).
     const lineHeight = (line.lineHeight ?? 1.05).toFixed(3);
     const letterSpacing = (line.letterSpacing ?? 0).toFixed(3);
-    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre-line; overflow: hidden; display: flex; align-items: center; font-family: ${OVERLAY_FONT_STACK}; font-weight: ${OVERLAY_FONT_WEIGHT}; line-height: ${lineHeight}; letter-spacing: ${letterSpacing}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; ${textFillCss(line)} text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
+    return `  <div class="ovText" style="position: absolute; left: ${line.leftPct.toFixed(2)}%; top: ${line.topPct.toFixed(2)}%; width: ${line.widthPct.toFixed(2)}%; height: ${line.heightPct.toFixed(2)}%; white-space: pre; overflow: hidden; display: flex; align-items: center; font-family: ${OVERLAY_FONT_STACK}; font-weight: ${OVERLAY_FONT_WEIGHT}; line-height: ${lineHeight}; letter-spacing: ${letterSpacing}em; font-size: ${line.fontSizeCqw.toFixed(2)}cqw; ${textFillCss(line)} text-shadow: ${line.shadow}; opacity: ${opacity};">${escapeHtml(line.text)}</div>`;
   }).join('\n');
 
   // width/height attributes (the image's real intrinsic pixel size, distinct

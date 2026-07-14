@@ -52,18 +52,15 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Top-aligned, not vertically centered - freed up once the settings
-     popover stopped opening downward under its button (see .popoverPanel),
-     which used to need the extra room below. */
-  justify-content: flex-start;
+  justify-content: center;
   text-align: center;
   gap: 16px;
-  padding: 96px 0 40px;
+  padding: 40px 0;
 }
 /* 72px = the 36px title, doubled again. */
 h1 { font-size: 72px; margin: 0; color: var(--highlight); }
-/* 27px = the 36px subtitle, shrunk to 75%. */
-.subtitle { font-size: 27px; font-weight: 400; color: var(--foreground); opacity: 0.7; margin: 0; }
+/* 33.75px = the 27px subtitle (already 75% of the 36px original), enlarged another 25%. */
+.subtitle { font-size: 33.75px; font-weight: 400; color: var(--foreground); opacity: 0.7; margin: 0; }
 .landingActions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; margin-top: 12px; }
 .landingBtn {
   padding: 16px 32px; border-radius: 10px; font-size: 18px; font-weight: 700; cursor: pointer;
@@ -71,7 +68,8 @@ h1 { font-size: 72px; margin: 0; color: var(--highlight); }
 }
 .landingBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
 /* Pinned to the landing screen's top-right corner rather than sitting below
-   the buttons in flow - freed-up space from the top-aligned layout above. */
+   the buttons in flow - position:absolute, so it's unaffected by whether
+   #landingSection's own content is top-aligned or vertically centered. */
 .credit { position: absolute; top: 24px; right: 24px; font-size: 13px; font-weight: 700; color: var(--foreground); opacity: 0.55; display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 /* Highlight-colored (not the subtler border color) per request - the frame
    itself is meant to draw the eye, not just visually contain the image. */
@@ -99,16 +97,33 @@ label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; c
    (radio/checkbox descriptions, field labels like "字級"/"顏色") stay
    regular text so the accent still reads as "important", not just decorative. */
 .sectionTitle { color: var(--highlight); }
+/* "2. Alt 文字" moved into #uploadPanel, right under the image preview box -
+   needs its own top margin since it's no longer the first child (which is
+   where the shared `label` rule's margin-bottom:6px alone would otherwise
+   leave it touching #previewWrap directly above it). */
+#altLabel { margin-top: 16px; }
 /* "圖片預覽" heading + #ocrStatus share one line - status text used to sit
    under the file picker on the left, now lives next to the preview column's
-   own heading on the right instead. */
-.sectionTitleRow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+   own heading on the right instead. Also shared by #uploadPanel's own
+   "1. 選擇圖片" + #chooseImageBtn row - min-height matches .smallBtn's own
+   rendered height, so both panels' header rows are the same height
+   regardless of whether their right-hand content is a button or plain
+   text, which is what keeps the image preview boxes below them starting
+   at the same y position (see #previewWrap/#previewCanvasOuter). */
+.sectionTitleRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; min-height: 33px; }
 .sectionTitleRow .sectionTitle { margin-bottom: 0; }
-.sectionTitleRow #ocrStatus { margin: 0; text-align: right; }
-/* Same visual form as the landing screen's buttons (.landingBtn) per
-   request - replaces the browser's own native file-picker button/label,
-   which can't be restyled or relabeled directly. */
-#chooseImageBtn { margin-bottom: 16px; }
+.sectionTitleRow #ocrStatus { margin: 0; text-align: right; white-space: nowrap; }
+/* Compact variant of the same visual language as .landingBtn - sits inline
+   next to a .sectionTitle (see .sectionTitleRow) rather than as a full-width
+   block, so it doesn't dominate the panel the way the landing page's own
+   larger buttons do. #chooseImageBtn replaces the browser's own native
+   file-picker button/label, which can't be restyled or relabeled directly. */
+.smallBtn {
+  padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer;
+  border: 1.5px solid var(--highlight); background: #fff; color: var(--highlight);
+  white-space: nowrap;
+}
+.smallBtn:hover { background: var(--highlight); color: var(--highlight-foreground); }
 input[type="file"], input[type="password"], select, textarea {
   width: 100%;
   padding: 10px;
@@ -127,8 +142,17 @@ textarea { resize: vertical; min-height: 44px; }
 #languageList { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 #languageList .checkboxRow { margin-bottom: 8px; width: 130px; }
 
-/* Padding/font-size/border-radius are the original values scaled 1.5x. */
+/* Width spans exactly from #uploadPanel's horizontal center to
+   #editPanelWrap's horizontal center - with .mainGrid's two equal 1fr
+   columns plus a gap G, each column's own center sits G/2 inside its own
+   half, so the distance between the two columns' centers works out to
+   (100% + G) / 2 of the shared container width (see .mainGrid's gap
+   below, which this must stay in sync with) - centered via .bottomRow's
+   flex centering, not by any fixed pixel width, so it stays correct at
+   any viewport size. Padding/font-size/border-radius are the original
+   values scaled 1.5x. */
 .genBtn {
+  width: calc((100% + 20px) / 2);
   background: #fff; color: var(--highlight); border: 2px solid var(--highlight); padding: 18px 36px;
   border-radius: 9px; font-size: 22.5px; font-weight: 700; cursor: pointer;
 }
@@ -143,8 +167,8 @@ textarea { resize: vertical; min-height: 44px; }
 .settingsBar { position: relative; }
 .popoverPanel {
   /* To the right of the button, top edge aligned with the button's top
-     edge - not centered underneath it, so opening it no longer eats into
-     the vertical space below (see #landingSection's top-aligned layout). */
+     edge - not centered underneath it, so opening it doesn't push any
+     content below the button down or eat into vertical space there. */
   position: absolute; top: 0; left: calc(100% + 12px); z-index: 50;
   width: min(560px, 90vw);
   background: var(--card); border: 1px solid var(--border); border-radius: 10px;
@@ -181,7 +205,6 @@ textarea { resize: vertical; min-height: 44px; }
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 10px;
   border-radius: 10px;
   overflow: hidden;
   border: 1px dashed var(--border);
@@ -227,10 +250,21 @@ textarea { resize: vertical; min-height: 44px; }
      js/main.js measures against to fit each line's font-size to its OCR
      box, so rendering in a different font here would make that fit wrong. */
   font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', -apple-system, sans-serif;
-  /* line-height/letter-spacing/white-space are set inline per-line by
-     js/preview.js (defaults 1.05/0/pre-line) - pre-line so a merged
-     multi-line box's "\n"s (js/line-merge.js) render as real breaks. */
-  white-space: pre-line;
+  /* line-height/letter-spacing are set inline per-line by js/preview.js
+     (defaults 1.05/0). white-space:pre (not pre-line) so a merged multi-
+     line box's "\n"s (js/line-merge.js) still render as real breaks, but
+     the browser can never additionally wrap *within* one of those lines
+     if the fitted font-size/letter-spacing doesn't perfectly match the
+     box width (small measurement/rounding gaps between js/text-fit.js's
+     canvas-based estimate and actual CSS layout are normal) - pre-line
+     allowed that in-line wrap, and for CJK text (breakable between any
+     two characters, no spaces required) even a few px of overflow could
+     push a whole character onto a new line, which cascaded into pushing
+     every following line down and off the bottom edge under
+     overflow:hidden - a single line quietly clipping a few px narrower
+     than intended (still happens sometimes) is a far smaller problem
+     than an entire subsequent line silently disappearing. */
+  white-space: pre;
   overflow: hidden;
   pointer-events: none;
 }
@@ -244,9 +278,10 @@ textarea { resize: vertical; min-height: 44px; }
 #openEditorBtn[hidden] { display: none; }
 #previewOpacityControls[hidden] { display: none; }
 
-.bottomRow { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: end; margin-bottom: 20px; }
-.bottomRow .panel { margin-bottom: 0; }
-.bottomRow .genBtn { justify-self: end; }
+/* Just centers .genBtn now that "2. Alt 文字" moved into #uploadPanel above
+   (see index.html) - the button's own width (see .genBtn) is what spans it
+   from #uploadPanel's center to #editPanelWrap's center, not this row. */
+.bottomRow { display: flex; justify-content: center; margin-bottom: 20px; }
 
 #outputWrap[hidden] { display: none; }
 /* Same bouncy entrance every time this section un-hides (each "產生 HTML" click). */
@@ -354,10 +389,14 @@ textarea { resize: vertical; min-height: 44px; }
   font-weight: 700;
   /* Must match js/text-fit.js's OVERLAY_FONT_STACK - see .previewLine above. */
   font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'PingFang TC', -apple-system, sans-serif;
-  /* line-height/letter-spacing/white-space are set inline per-line by
-     js/editor.js (defaults 1.05/0/pre-line) - pre-line so a merged
-     multi-line box's "\n"s (js/line-merge.js) render as real breaks. */
-  white-space: pre-line;
+  /* line-height/letter-spacing are set inline per-line by js/editor.js
+     (defaults 1.05/0). white-space:pre (not pre-line) - see .previewLine
+     above for why: preserves the "\n" breaks between a merged multi-line
+     box's rows, but never lets the browser wrap *within* one of those
+     rows if the fit isn't pixel-perfect, which used to be able to cascade
+     into pushing an entire subsequent line down and out of view under
+     overflow:hidden. */
+  white-space: pre;
   overflow: hidden;
   outline: none;
   cursor: text;

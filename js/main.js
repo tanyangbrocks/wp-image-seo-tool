@@ -27,6 +27,7 @@ const previewCanvasImg = document.getElementById('previewCanvasImg');
 const openEditorBtn = document.getElementById('openEditorBtn');
 const previewOpacityControls = document.getElementById('previewOpacityControls');
 const previewCanvasBgOpacity = document.getElementById('previewCanvasBgOpacity');
+const previewCanvasOverlayOpacity = document.getElementById('previewCanvasOverlayOpacity');
 const editorDialog = document.getElementById('editorDialog');
 const closeEditorBtn = document.getElementById('closeEditorBtn');
 const altInput = document.getElementById('altInput');
@@ -139,6 +140,17 @@ previewCanvasBgOpacity.addEventListener('input', () => {
   previewCanvasImg.style.opacity = String(Number(previewCanvasBgOpacity.value) / 100);
 });
 
+previewCanvasOverlayOpacity.addEventListener('input', () => {
+  // Scales each line's own baseOpacity by the slider fraction rather than
+  // overwriting it outright, so per-block opacity differences (set in the
+  // editor) stay visible while "peeking" - same pattern as the WordPress
+  // output preview's own overlay-opacity slider (js/wp-preview.js).
+  const factor = Number(previewCanvasOverlayOpacity.value) / 100;
+  previewCanvasWrap.querySelectorAll('.previewLine').forEach((el) => {
+    el.style.opacity = String(Number(el.dataset.baseOpacity ?? '1') * factor);
+  });
+});
+
 altInput.addEventListener('input', () => {
   generateBtn.disabled = !altInput.value.trim() || !imageDataUrl;
 });
@@ -212,6 +224,7 @@ imageInput.addEventListener('change', async () => {
       previewCanvasImg.src = imageDataUrl;
       previewCanvasBgOpacity.value = 100;
       previewCanvasImg.style.opacity = 1;
+      previewCanvasOverlayOpacity.value = 100;
       // Read-only preview only, no boxes yet - the interactive editor stays
       // unmounted until openEditor() runs (button click or double-click).
       renderPreview(previewCanvasWrap, []);
@@ -331,7 +344,7 @@ imageInput.addEventListener('change', async () => {
 
         if (detectedLines.length) {
           ocrStatus.className = 'done';
-          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字，右邊可以預覽，按「編輯」調整位置/大小`;
+          ocrStatus.textContent = `辨識完成，偵測到 ${detectedLines.length} 行文字`;
         } else {
           ocrStatus.className = 'error';
           ocrStatus.textContent = '沒有偵測到文字（可能圖片本身沒有文字，或字體太特殊辨識不出來；按「編輯」仍可以手動新增文字方塊）';

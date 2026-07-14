@@ -52,11 +52,11 @@ function renderCanvas() {
     textEl.style.lineHeight = String(line.lineHeight ?? 1.05);
     // contenteditable inserts literal newlines as <br> or new <div>s rather
     // than reflecting back into textContent as "\n" characters the way a
-    // <textarea> would - white-space:pre-line (see CSS) still displays a
-    // merged multi-line box's existing "\n"s correctly, this just keeps
-    // manual Enter-key edits inside a box from producing DOM the .textContent
-    // readback below wouldn't round-trip cleanly (contenteditable + pre-line
-    // is an intentionally text-only editing surface, not a rich editor).
+    // <textarea> would - white-space:pre (see CSS) still displays a merged
+    // multi-line box's existing "\n"s correctly, this just keeps manual
+    // Enter-key edits inside a box from producing DOM the .textContent
+    // readback below wouldn't round-trip cleanly (contenteditable + pre is
+    // an intentionally text-only editing surface, not a rich editor).
     textEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') e.preventDefault();
     });
@@ -208,6 +208,18 @@ editorCanvasWrap.addEventListener('pointerdown', (e) => {
   const textEl = box.querySelector('.ovBoxText');
   if (document.activeElement === textEl) textEl.blur();
   e.preventDefault();
+  // e.preventDefault() above also suppresses the browser's own default
+  // "focus the clicked element" behavior for mousedown/pointerdown - a real
+  // bug this caused: clicking the frame visually selected the box (solid
+  // border, handles) but never actually moved keyboard focus there, so
+  // Delete/Backspace right after a mouse click did nothing (the keydown
+  // handler below only acts when e.target is inside a focused
+  // .ovBoxFrame) - confirmed via document.activeElement staying on
+  // whatever had focus before the click. Focusing explicitly here (whether
+  // the frame or a resize handle was actually clicked - either one means
+  // this box is now the selected one) restores that.
+  const frameEl = frame || box.querySelector('.ovBoxFrame');
+  frameEl.focus({ preventScroll: true });
 
   const rect = editorCanvasWrap.getBoundingClientRect();
   const line = detectedLines[index];

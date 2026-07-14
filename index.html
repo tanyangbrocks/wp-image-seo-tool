@@ -124,13 +124,18 @@
 
   <div class="mainGrid">
   <div class="panel" id="uploadPanel">
-    <label class="sectionTitle">1. 選擇圖片</label>
+    <div class="sectionTitleRow">
+      <label class="sectionTitle">1. 選擇圖片</label>
+      <button type="button" id="chooseImageBtn" class="smallBtn">切換圖片</button>
+    </div>
     <input type="file" id="imageInput" accept="image/*" hidden />
-    <button type="button" id="chooseImageBtn" class="landingBtn">切換圖片</button>
 
     <div id="previewWrap">
       <img id="previewImg" alt="" />
     </div>
+
+    <label for="altInput" class="sectionTitle" id="altLabel">2. Alt 文字</label>
+    <textarea id="altInput" placeholder="例如：夏季新品促銷海報"></textarea>
   </div>
 
   <div class="panel" id="editPanelWrap">
@@ -146,15 +151,12 @@
     </div>
     <div class="opacityControls" id="previewOpacityControls" hidden>
       <label>底圖不透明度 <input type="range" id="previewCanvasBgOpacity" min="0" max="100" value="100" /></label>
+      <label>文字不透明度 <input type="range" id="previewCanvasOverlayOpacity" min="0" max="100" value="100" /></label>
     </div>
   </div>
 </div>
 
 <div class="bottomRow">
-  <div class="panel" id="altPanel">
-    <label for="altInput" class="sectionTitle">2. Alt 文字</label>
-    <textarea id="altInput" placeholder="例如：夏季新品促銷海報"></textarea>
-  </div>
   <button class="genBtn" id="generateBtn" disabled>產生 HTML</button>
 </div>
 
