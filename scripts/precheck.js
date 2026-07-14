@@ -24,6 +24,7 @@ const { spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const JS_DIR = path.join(ROOT, 'js');
+const SCRIPTS_DIR = path.join(ROOT, 'scripts');
 const HTML_FILE = path.join(ROOT, 'index.html');
 const CSS_FILE = path.join(ROOT, 'css', 'style.css');
 const EXCLUDE_DIRS = new Set(['.git', 'node_modules']);
@@ -47,7 +48,24 @@ function findFiles(dir, ext) {
   return found;
 }
 
-const jsFiles = findFiles(JS_DIR, '.js');
+// Node-run scripts (scripts/*.js, CommonJS) get the syntax check below
+// alongside the browser app modules (js/*.js, ES modules) - `node
+// --input-type=module --check` parses both fine since this is a syntax-only
+// check (require()/module.exports are just ordinary expressions under
+// module grammar too). They deliberately do NOT get the DOM-id/import-
+// export cross-reference checks (sections 2-3) - those are naive text-based
+// regex scans, not a real parser, and scripts/refactor-split-main.js embeds
+// entire other files' source as string literals (the content it writes
+// out), which those regexes can't tell apart from real import statements -
+// confirmed by an actual false-positive run: it flagged that file's
+// *embedded* `import ... from './languages.js'` text as if
+// refactor-split-main.js itself imported it, and separately flagged this
+// file's own explanatory comment two-hundred-some lines below (`// e.g.
+// import Foo from './foo.js'`) as a real import too. appJsFiles (js/ only)
+// keeps those two checks scoped to files that only ever contain *real*
+// import/export statements, not string content that happens to look like some.
+const appJsFiles = findFiles(JS_DIR, '.js');
+const jsFiles = [...appJsFiles, ...findFiles(SCRIPTS_DIR, '.js')];
 const htmlSrc = read(HTML_FILE);
 const cssSrc = read(CSS_FILE);
 
@@ -72,7 +90,7 @@ for (const file of jsFiles) {
 const htmlIds = new Set([...htmlSrc.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
 const htmlNames = new Set([...htmlSrc.matchAll(/\bname="([^"]+)"/g)].map((m) => m[1]));
 
-for (const file of jsFiles) {
+for (const file of appJsFiles) {
   const src = read(file);
   for (const m of src.matchAll(/document\.getElementById\(\s*['"]([^'"]+)['"]\s*\)/g)) {
     if (!htmlIds.has(m[1])) {
@@ -105,7 +123,7 @@ function getExportedNames(src) {
   return names;
 }
 
-for (const file of jsFiles) {
+for (const file of appJsFiles) {
   const src = read(file);
   for (const m of src.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"](\.[^'"]+)['"]/g)) {
     const importedNames = m[1].split(',').map((s) => s.split(/\s+as\s+/)[0].trim()).filter(Boolean);
@@ -212,7 +230,7 @@ const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img'
     // so an exact-literal check produces false positives for those.
     const inJs = new RegExp(`\\b${bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allJsSrc);
     if (!inHtml && !inJs) {
-      warnings.push(`[css-orphan] css/style.css: selector "${token}" doesn't appear to match anything in index.html or js/*.js`);
+      warnings.push(`[css-orphan] css/style.css: selector "${token}" doesn't appear to match anything in index.html or any .js file`);
     }
   }
 }

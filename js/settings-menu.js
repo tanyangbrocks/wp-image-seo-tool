@@ -80,10 +80,33 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !settingsPanel.hidden) closeSettingsPanel();
 });
 
+// localStorage can throw (not just return null/no-op) in real browsers -
+// Safari in private browsing mode throws on every write, some browsers
+// throw if the user has disabled storage entirely, and any implementation
+// can throw QuotaExceededError. "Remember this key" is a convenience, not
+// core functionality (the tool works fine re-pasting the key each visit),
+// so a storage failure should degrade silently rather than break the
+// settings panel's other event handlers.
+function readSavedKey() {
+  try {
+    return localStorage.getItem('wpOverlayGen_visionApiKey');
+  } catch {
+    return null;
+  }
+}
+function writeSavedKey(value) {
+  try {
+    if (value) localStorage.setItem('wpOverlayGen_visionApiKey', value);
+    else localStorage.removeItem('wpOverlayGen_visionApiKey');
+  } catch {
+    /* storage unavailable - the key just won't persist across visits */
+  }
+}
+
 // Restore a remembered key (only ever written to *this browser's* local
 // storage by the checkbox below - never embedded in the shared HTML file
 // or sent anywhere except directly to Google's API from this page).
-const savedKey = localStorage.getItem('wpOverlayGen_visionApiKey');
+const savedKey = readSavedKey();
 if (savedKey) {
   apiKeyInput.value = savedKey;
   rememberKey.checked = true;
@@ -91,12 +114,8 @@ if (savedKey) {
   updateEnginePanels();
 }
 rememberKey.addEventListener('change', () => {
-  if (rememberKey.checked && apiKeyInput.value.trim()) {
-    localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
-  } else {
-    localStorage.removeItem('wpOverlayGen_visionApiKey');
-  }
+  writeSavedKey(rememberKey.checked && apiKeyInput.value.trim() ? apiKeyInput.value.trim() : null);
 });
 apiKeyInput.addEventListener('input', () => {
-  if (rememberKey.checked) localStorage.setItem('wpOverlayGen_visionApiKey', apiKeyInput.value.trim());
+  if (rememberKey.checked) writeSavedKey(apiKeyInput.value.trim());
 });

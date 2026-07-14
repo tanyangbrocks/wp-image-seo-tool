@@ -1,6 +1,6 @@
 # 人工複查 Checklist — 靜態預檢腳本抓不到、但不需要實跑測試就能抓的 bug
 
-*建立於 2026-07-13，2026-07-14 複查並更新（架構已大改：編輯視窗方塊互動從「圓形移動把手 `.ovMoveHandle` ＋ 角落限定 4 縮放把手 ＋ 右上角 `.ovDeleteBtn` × 鈕」換成「貼齊文字外緣的 `.ovBoxFrame` 框線 ＋ 8 個控點（四角+四邊中點）＋ Delete/Backspace 鍵刪除」，見下方各項目裡標記「2026-07-14」的複查小節）*
+*建立於 2026-07-13，2026-07-14 複查並更新兩輪：① 編輯視窗方塊互動從「圓形移動把手 `.ovMoveHandle` ＋ 角落限定 4 縮放把手 ＋ 右上角 `.ovDeleteBtn` × 鈕」換成「貼齊文字外緣的 `.ovBoxFrame` 框線 ＋ 8 個控點（四角+四邊中點）＋ Delete/Backspace 鍵刪除」；② `js/main.js` 拆成 `js/main.js`（主流程）＋ `js/settings-menu.js`（設定選單）＋ `js/wp-preview.js`（HTML 輸出/WordPress 預覽），見下方各項目裡標記日期的複查小節*
 
 `scripts/precheck.js` 能抓的是「機械式比對」類的錯誤（DOM id 打錯、import 對不上 export、檔案不存在、HTML 標籤沒對齊）。但很多真實的 bug 屬於**邏輯/推理層級**——沒有拼寫錯誤、語法完全合法，程式「看起來」沒問題，只有實際順著執行流程、跨檔案追蹤資料流、想邊界情境，才看得出來。這份清單就是列出這一類、可以純靠**讀程式碼＋推理**找到（不需要真的開瀏覽器點來點去）的問題類型，之後每次改完重大功能都可以拿出來重新過一輪。
 
@@ -21,6 +21,8 @@
 
 **2026-07-14 複查**：後來新增的「← 上一步」`resetWorkspace()` 沿用同一個 `uploadToken` 機制（重置時遞增），會正確擋掉重置當下還在跑的舊 OCR 結果寫回。仍然乾淨，不需要再修。
 
+**同日再複查（main.js 拆檔後）**：`imageDataUrl`／`naturalWidth`／`naturalHeight`／`detectedLines`／`uploadToken` 這幾個模組層級 `let` 全部還留在 `js/main.js`（拆檔時刻意保留在主流程檔案，沒有搬到 `settings-menu.js`／`wp-preview.js`），競態保護邏輯完全沒變。**新關注點**：`generateAndPreview()` 搬到 `wp-preview.js` 後，呼叫方式從「內部函式直接讀閉包」改成「`main.js` 呼叫時把當下的 `imageDataUrl`／`detectedLines`／`naturalWidth`／`naturalHeight` 包成物件字面量傳進去」——確認這個呼叫（`generateBtn` 的 `click` handler）是同步的（沒有 `await` 或其他非同步邊界），物件字面量裡的值就是點擊當下的即時值，跟原本閉包直接讀是等價的，不會因為「傳參數」這個動作本身多出一個競態視窗。乾淨，不需要修。`js/settings-menu.js` 讀取的引擎/語言/金鑰狀態（`getSelectedEngine()` 等）本來就是「使用者可以在辨識進行中途改設定」這種既有行為（拆檔前就是這樣，只是原本直接讀 DOM 元素、現在透過 getter 函式讀，行為完全沒變），不是這次拆檔新引入的問題。
+
 ---
 
 ## 2. 缺少的錯誤處理路徑
@@ -35,6 +37,8 @@
 **狀態**：✅ 已修 — `img.onerror` 補上，失敗時顯示明確錯誤訊息並讓使用者能重新選檔；`copyBtn` 包 `try/catch`，失敗時顯示「複製失敗，請手動選取後 Ctrl+C」之類的提示而不是靜默失敗。
 
 **2026-07-14 複查**：重新過一次 `js/main.js`／`js/ocr-*.js` 全部的 `fetch`/`new Image()`/`new FileReader()` 呼叫點，錯誤路徑都還在且正確接住；`js/editor.js` 的 `cancelEditorBtn`/`.ovBoxFrame` 新增的程式碼沒有引入任何新的瀏覽器 API 呼叫（`textEl.blur()`／`frame.focus()`／陣列操作都不會 reject/throw）。乾淨，不需要再修。
+
+**同日再複查（main.js 拆檔後）＋抓到一個真的漏網 bug**：拆出去的 `js/settings-menu.js` 裡有 4 處 `localStorage.getItem`/`setItem`/`removeItem` 呼叫（記住 Vision API 金鑰用），**完全沒有 try/catch**——這段程式碼是從原本 `main.js` 原封不動搬過去的，不是這次拆檔新寫的，但先前兩輪複查都沒抓到。`localStorage` 在真實瀏覽器裡會 throw，不是只回傳 `null`/靜默失敗：Safari 私密瀏覽模式下**所有寫入**都會丟 `QuotaExceededError`（不是只有滿了才丟）、使用者關閉網站資料儲存權限、或單純儲存空間滿了都會觸發。一旦丟出，`rememberKey`/`apiKeyInput` 的 `change`/`input` handler 會整個中斷，使用者勾選「記住金鑰」卻完全沒有任何錯誤提示、以為記住了，下次造訪金鑰卻不見了。**修法**：抽出 `readSavedKey()`/`writeSavedKey()` 兩個小函式包 try/catch，失敗時靜默降級（金鑰就是不會跨造訪保留，但當下這次使用完全不受影響）——「記住金鑰」本來就是錦上添花的功能，不該讓儲存失敗拖累使用者當下正在做的辨識流程。**驗證方式**：正常路徑先驗證存取金鑰功能沒壞（勾選記住→`localStorage` 確實寫入正確值）；再用 `Object.getPrototypeOf(localStorage).setItem` 換成一個會 throw 的假函式，模擬 Safari 私密模式，確認 `input` handler 不再往外拋例外、輸入框本身的值也沒受影響（只是金鑰沒被存住，UI 其他部分正常）。
 
 ---
 
@@ -96,6 +100,8 @@
 
 **2026-07-14 複查**：`apiKeyInput` 出現的位置沒有變（還是只在 `js/main.js` 的辨識請求跟 localStorage 存取），`js/html-builder.js` 依然完全沒有引用它。乾淨。
 
+**同日再複查（main.js 拆檔後，這項特別重要，因為新增了一個「產生輸出」的檔案）**：`apiKeyInput`／金鑰現在住在新的 `js/settings-menu.js`（DOM 元素＋讀寫都在裡面），只對外匯出 `getApiKey()` 這個 getter。逐一檢查：`js/wp-preview.js`（新的輸出產生模組，最需要注意這項的地方，因為它就是「組出最終 HTML」那一步）完全沒有 import `getApiKey`，`generateAndPreview()` 的參數只有 `{imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight}`，沒有任何金鑰相關的東西流進去；`js/html-builder.js` 一樣沒有引用。乾淨，拆檔沒有引入新的外洩路徑。
+
 ---
 
 ## 8. 使用者可見文字的 HTML 跳脫一致性
@@ -107,6 +113,8 @@
 **狀態**：✅ 已確認無問題（純驗證，沒有改動）。
 
 **2026-07-14 複查**：`line.text`／`altText` 的跳脫路徑沒變；`js/line-merge.js` 這次改動只碰幾何/字級比對邏輯（`heightPct`／`_lastHeightPct`），沒有碰 `text` 欄位本身的處理方式，合併後的 `text`（含 `\n`）一樣是透過既有的 `escapeHtml()` 路徑輸出。乾淨。
+
+**同日再複查（main.js 拆檔後）**：`buildFinalHtml()` 的呼叫點從 `main.js` 內部搬到新的 `js/wp-preview.js`，但呼叫方式（傳入 `altText`／`detectedLines` 兩個會經過跳脫處理的值）完全沒變，`escapeHtml()` 本身也沒被動到。乾淨。
 
 ---
 
@@ -130,6 +138,8 @@
 
 **狀態**：⏭️ 已知限制，這次不修（記錄下來避免未來被誤認為「沒發現」）。
 
+**2026-07-14 複查**：`settingsPanel`／`settingsToggleBtn` 現在住在 `js/settings-menu.js`，判斷邏輯（沒有 focus trap）完全沒變，純粹是檔案位置搬家。維持原本的已知限制判斷。
+
 ---
 
 ## 11. 視覺不可見狀態（opacity:0 等）下的可發現性／可點擊性（2026-07-14 新增）
@@ -149,6 +159,16 @@
 **這次稽核結果**：這次重寫方塊互動時，原本寫的是 `box.querySelector('.ovBoxText:focus')` 來判斷「這個方塊的文字目前是不是正在被輸入」，用瀏覽器互動測試驗證時發現：即使 `document.activeElement` 已經正確指向該元素、`:focus-within`（在祖先元素上查）也正確判定為 `true`，唯獨 `.ovBoxText:focus` 這個直接查詢抓不到、`el.matches(':focus')` 也回傳 `false`。改用 `document.activeElement === textEl` 直接比對後行為就正確了。**不確定這是真實瀏覽器普遍的行為還是這次測試環境的特性**（這個專案先前已經記錄過好幾次同一個測試工具的環境限制：`requestAnimationFrame`／`<dialog>` 的 `close` 事件／`IntersectionObserver` 都在這個工具裡不會正常觸發，這次的 `focus` 事件本身也不會在程式化 `.focus()` 呼叫後觸發，只有 `document.activeElement` 跟 `:focus-within` 的即時狀態是可信的）——但不論成因為何，`document.activeElement` 比較直接、不依賴 CSS 引擎的即時性，是更穩健的寫法，值得記錄下來當一般性原則。
 
 **狀態**：✅ 已修 — `js/editor.js` 的 `pointerdown` handler 判斷「要不要把文字方塊 blur 掉」時改用 `document.activeElement === textEl`。
+
+---
+
+## 13. 把函式從「讀外層閉包」改成「明確參數」時，呼叫端要跟著檢查（2026-07-14 新增，main.js 拆檔時的通則）
+
+**要檢查什麼**：把一個函式從某個模組搬到新檔案時，如果它原本是直接讀外層閉包的變數（例如模組層級的 `let`），搬家後往往需要改成「呼叫方把值當參數傳進去」。這個轉換本身很機械，但**呼叫端**容易漏掉兩種情況：① 呼叫端傳進去的是「稍早算好、可能已經過期的值」而不是「呼叫當下的即時值」（尤其如果呼叫端跟原本的變數更新之間隔了一個非同步邊界）；② 拆出去的函式如果被**多個地方**呼叫，每個呼叫點是不是都正確傳了同一組完整參數，有沒有漏傳。純讀程式碼可以檢查：找到每個呼叫點，確認參數是在「跟函式呼叫同一個同步區塊」內讀出來的，而不是提早快取的舊值。
+
+**這次稽核結果**：`generateAndPreview()` 從 `js/main.js` 內部函式（直接讀 `imageDataUrl`/`detectedLines`/`naturalWidth`/`naturalHeight` 這幾個模組層級 `let`）搬到 `js/wp-preview.js`，改成 `generateAndPreview({imageDataUrl, altText, detectedLines, naturalWidth, naturalHeight})` 明確參數版本。檢查唯一的呼叫點（`generateBtn` 的 `click` handler）：`main.js` 在呼叫的當下才組出這個物件字面量，中間沒有任何 `await`／`setTimeout`／事件佇列邊界，讀到的就是點擊當下的即時值，跟原本閉包直接讀語意完全相同。乾淨，這次拆檔沒有引入這類 bug，但這個檢查角度值得留下來，之後任何函式抽出去都要照這個方式覆查一次。
+
+**狀態**：✅ 已確認無問題（純驗證，沒有改動）——記錄下來當作之後拆檔的固定檢查項。
 
 ---
 
